@@ -3,7 +3,7 @@ import pandas as pd
 from gsheet_handler import save_snapshot
 
 def render_data_ops(df: pd.DataFrame, sheet_url_or_id):
-    st.header("🛠 데이터 운영 (Data Ops)")
+    # st.header("🛠 데이터 운영 (Data Ops)") # Title handled in app.py
     st.info("데이터를 직접 수정하고 저장할 수 있습니다. 저장 시 구글 시트에 새로운 스냅샷이 생성됩니다.")
     
     # Data Editor

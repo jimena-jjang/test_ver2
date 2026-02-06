@@ -3,7 +3,7 @@
 This project is an evolved version of the Product Management System, built with Streamlit and Google Sheets.
 
 ## 터미널 실행 명령어
-- python -m streamlit run app.py
+- streamlit run app.py
 
 ## Features
 - **Roadmap View**: Gantt chart visualization with complex sorting (User -> Squad -> Order).

@@ -16,6 +16,15 @@ STATUS_CONFIG = {
     'DROP': {'color': '#1F2937'},
 }
 
+STATUS_ORDER = [
+    '진행 중',
+    '진행 예정',
+    '보류/이슈',
+    '단순 인입',
+    '진행 완료',
+    'DROP'
+]
+
 DEFAULT_STATUS_COLOR = '#888888'
 
 # -----------------------------------------------------------------------------
@@ -79,6 +88,20 @@ def process_data(df: pd.DataFrame) -> pd.DataFrame:
                 df['Status'] = '진행 예정'
             else:
                 pass # Let it fail or handle downstream if critical
+
+    # Sort Status by defined order
+    # Create final order: STATUS_ORDER candidates first, then any others found in data sorted alphabetically
+    present_status = df['Status'].unique().tolist() if 'Status' in df.columns else []
+    
+    # Identify statuses not in our fixed list
+    known_set = set(STATUS_ORDER)
+    unknown_statuses = sorted([s for s in present_status if s not in known_set])
+    
+    # Final combined order
+    final_status_order = STATUS_ORDER + unknown_statuses
+    
+    # Apply Categorical type
+    df['Status'] = pd.Categorical(df['Status'], categories=final_status_order, ordered=True)
 
     return df
 

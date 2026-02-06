@@ -492,7 +492,8 @@ def render_roadmap(df_original):
             df_chart = df_filtered
         
     # Main Area
-    st.markdown("<h3 style='text-align: center; margin-bottom: 20px;'>📊 Project Roadmap</h3>", unsafe_allow_html=True)
+    # Title handled in app.py
+    # st.markdown("<h3 style='text-align: center; margin-bottom: 20px;'>📊 Project Roadmap</h3>", unsafe_allow_html=True)
 
     # Date Period Filter (Main Area)
     today = datetime.now().date()

@@ -26,15 +26,18 @@ page = st.sidebar.radio("Navigation", ["Roadmap View", "Analysis Report", "Data 
 st.sidebar.divider()
 
 # Data Connection Settings (Mock or Secret)
-with st.sidebar.expander("🔌 Connection Settings", expanded=False):
-    DEFAULT_SHEET_ID = st.secrets.get("G_SHEET_ID", "")
-    DEFAULT_GID = st.secrets.get("G_SHEET_GID", "")
+with st.sidebar.expander("🔌 Connection Settings", expanded=True):
+    # Load defaults from secrets.toml if available
+    default_id = st.secrets.get("G_SHEET_ID", "")
+    default_gid = st.secrets.get("G_SHEET_GID", "")
     
-    if DEFAULT_SHEET_ID and DEFAULT_GID:
-         st.success("✅ Default configuration loaded")
-
-    sheet_id = st.text_input("Google Sheet ID", value=DEFAULT_SHEET_ID)
-    worksheet_name = st.text_input("Worksheet Name / GID", value=DEFAULT_GID)
+    st.caption("기본값은 `secrets.toml` 또는 입력란에서 수정 가능합니다.")
+    
+    sheet_id = st.text_input("Google Sheet ID", value=default_id)
+    worksheet_name = st.text_input("Worksheet Name / GID", value=default_gid)
+    
+    if default_id and default_gid and sheet_id == default_id and worksheet_name == default_gid:
+         st.success("✅ 기본 설정이 로드되었습니다")
 
 # Load Data
 df = None

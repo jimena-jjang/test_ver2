@@ -4,7 +4,7 @@ import plotly.express as px
 from logic import calculate_workload, predict_start_date, identify_issues
 
 def render_analysis_report(df: pd.DataFrame):
-    st.header("📊 데이터 분석 리포트")
+    # st.header("📊 데이터 분석 리포트") # Title handled in app.py
     
     tab1, tab2, tab3, tab4 = st.tabs(["과부하 지수", "최단 시작일 예측", "Swap 시나리오", "이슈 트래킹"])
     
