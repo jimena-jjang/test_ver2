@@ -2,6 +2,7 @@ import pandas as pd
 import unicodedata
 from datetime import datetime
 import plotly.express as px
+from squad_manager import get_squad_order
 
 # -----------------------------------------------------------------------------
 # CONSTANTS
@@ -17,10 +18,6 @@ STATUS_CONFIG = {
 
 DEFAULT_STATUS_COLOR = '#888888'
 
-SQUAD_DEFAULT_ORDER = [
-    '전사공통', '회원', '커머스', '팬덤', 'APP', '내부과제', 'devops'
-]
-
 # -----------------------------------------------------------------------------
 # DATA PROCESSING
 # -----------------------------------------------------------------------------
@@ -31,21 +28,38 @@ def process_data(df: pd.DataFrame) -> pd.DataFrame:
     df.columns = df.columns.astype(str).str.strip()
     
     # Column mapping based on requirements and existing utils.py
+    # Column mapping based on requirements and existing utils.py
     col_map = {
         'Squad (대분류)': 'Squad', 'squad': 'Squad',
         'subproject_name': 'Task', 'Subproject_Name (소분류)': 'Task',
         'start_date': 'Start', '시작일 (Start)': 'Start',
         'end_date': 'End', '종료일 (End)': 'End',
         'status': 'Status', '상태 (Status)': 'Status',
-        'Goal (목표)': 'Goal',
-        'order': 'Order', '정렬 순서': 'Order' # New sorting requirements
+        'Goal (목표)': 'Goal', 'goal': 'Goal',
+        'order': 'Order', '정렬 순서': 'Order',
+        
+        # New columns from [Master] CTO office Roadmap (2).xlsx
+        'main_goal': 'Main_Goal',
+        'sub_goal': 'Sub_Goal',
+        
+        'project_name': 'Project',
+        'type': 'Type',
+        'comment': 'Comment', 
+        'target': 'Target',
+        'cto_manager': 'Manager',
+        'PM': 'PM', 'PD': 'PD', 'FE': 'FE', 'BE': 'BE', 'QA': 'QA',
+        'remarks': 'Remarks'
     }
     
     rename_dict = {k: v for k, v in col_map.items() if k in df.columns}
     df = df.rename(columns=rename_dict)
     
+    # Handle Goal column logic
+    if 'Sub_Goal' in df.columns and 'Goal' not in df.columns:
+        df['Goal'] = df['Sub_Goal']
+    
     # Normalize strings
-    string_cols = ['Squad', 'Task', 'Status', 'Goal']
+    string_cols = ['Squad', 'Task', 'Status', 'Goal', 'Main_Goal', 'Sub_Goal', 'Project', 'Type', 'Comment', 'Target', 'Manager', 'PM', 'PD', 'FE', 'BE', 'QA', 'Remarks']
     for col in string_cols:
         if col in df.columns:
             df[col] = df[col].astype(str).str.strip().apply(lambda x: unicodedata.normalize('NFC', x) if isinstance(x, str) else x)
@@ -84,9 +98,12 @@ def apply_sorting(df: pd.DataFrame, user_sort_col: str = None) -> pd.DataFrame:
         
     if 'Squad' in df.columns:
         # Create a categorical type for Squad to enforce custom order
-        # We put '전사공통' first, then others.
-        present_squads = df['Squad']. unique()
-        ordered_squads = [s for s in SQUAD_DEFAULT_ORDER if s in present_squads]
+        present_squads = df['Squad'].unique()
+        
+        # Load dynamic order
+        squad_order_list = get_squad_order()
+        
+        ordered_squads = [s for s in squad_order_list if s in present_squads]
         others = [s for s in present_squads if s not in ordered_squads]
         final_squad_order = ordered_squads + sorted(others)
         

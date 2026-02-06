@@ -2,6 +2,9 @@
 
 This project is an evolved version of the Product Management System, built with Streamlit and Google Sheets.
 
+## 터미널 실행 명령어
+- python -m streamlit run app.py
+
 ## Features
 - **Roadmap View**: Gantt chart visualization with complex sorting (User -> Squad -> Order).
 - **Analysis Report**: Workload analysis, Start date prediction, Swap scenarios, Issue tracking.
@@ -66,3 +69,5 @@ python -m pytest tests/test_logic.py
 1. Push this repository to GitHub.
 2. Link the repository to a new project in Vercel.
 3. Configure **Environment Variables** in Vercel settings (copy contents from `secrets.toml`).
+
+

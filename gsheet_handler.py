@@ -1,8 +1,11 @@
+## 구글 스프레드시트 연동과 관련한 내용은 여기서 중앙관리 
+
 import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
+import os
 
 # Scope for Google Sheets API
 SCOPE = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
@@ -22,9 +25,12 @@ def connect_to_sheet():
         if "gcp_service_account" in st.secrets:
             creds_dict = dict(st.secrets["gcp_service_account"])
             creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, SCOPE)
-        else:
-            # Fallback for local testing if credentials.json exists
+        elif os.path.exists('credentials.json'):
+             # Fallback for local testing if credentials.json exists
             creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', SCOPE)
+        else:
+            st.error("❌ Credentials not found! Please set up `.streamlit/secrets.toml` or place `credentials.json` in the root directory.")
+            return None
             
         client = gspread.authorize(creds)
         return client
@@ -47,7 +53,19 @@ def load_data(sheet_url_or_id: str, worksheet_name: str = 0) -> pd.DataFrame:
         if isinstance(worksheet_name, int):
             ws = sheet.get_worksheet(worksheet_name)
         else:
-            ws = sheet.worksheet(worksheet_name)
+            try:
+                # Try opening by name first
+                ws = sheet.worksheet(worksheet_name)
+            except gspread.WorksheetNotFound:
+                # If failed, check if it's a GID (numeric string or int)
+                try:
+                    target_gid = int(worksheet_name)
+                    # Iterate to find matching GID
+                    ws = next((w for w in sheet.worksheets() if w.id == target_gid), None)
+                    if ws is None:
+                        raise gspread.WorksheetNotFound(f"GID {target_gid} not found")
+                except ValueError:
+                     raise gspread.WorksheetNotFound(f"Worksheet '{worksheet_name}' not found")
             
         data = ws.get_all_records()
         df = pd.DataFrame(data)

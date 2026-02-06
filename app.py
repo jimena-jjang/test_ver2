@@ -3,6 +3,7 @@ import pandas as pd
 from views import roadmap, analysis, data_ops
 from logic import process_data, apply_sorting, filter_data
 from gsheet_handler import load_data
+from squad_manager import sort_squads
 
 # -----------------------------------------------------------------------------
 # PAGE CONFIG
@@ -25,9 +26,15 @@ page = st.sidebar.radio("Navigation", ["Roadmap View", "Analysis Report", "Data 
 st.sidebar.divider()
 
 # Data Connection Settings (Mock or Secret)
-# For demo, allow users to input Sheet ID if not in secrets
-sheet_id = st.sidebar.text_input("Google Sheet ID", value=st.secrets.get("G_SHEET_ID", ""))
-worksheet_name = st.sidebar.text_input("Worksheet Name", value="Sheet1")
+with st.sidebar.expander("🔌 Connection Settings", expanded=False):
+    DEFAULT_SHEET_ID = st.secrets.get("G_SHEET_ID", "")
+    DEFAULT_GID = st.secrets.get("G_SHEET_GID", "")
+    
+    if DEFAULT_SHEET_ID and DEFAULT_GID:
+         st.success("✅ Default configuration loaded")
+
+    sheet_id = st.text_input("Google Sheet ID", value=DEFAULT_SHEET_ID)
+    worksheet_name = st.text_input("Worksheet Name / GID", value=DEFAULT_GID)
 
 # Load Data
 df = None
@@ -56,6 +63,7 @@ if df is not None:
     
     # Squad Filter
     all_squads = list(df['Squad'].unique()) if 'Squad' in df.columns else []
+    all_squads = sort_squads(all_squads) # Apply custom sort order
     selected_squads = st.sidebar.multiselect("Squad", all_squads, default=all_squads)
     
     # Date Range

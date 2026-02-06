@@ -26,6 +26,13 @@ def render_roadmap(df: pd.DataFrame):
     # Color Mapping based on Status logic
     color_discrete_map = {k: v['color'] for k, v in STATUS_CONFIG.items()}
     
+    # Define hover columns dynamically
+    hover_cols = ["Task", "Goal", "Status", "Start", "End"]
+    potential_cols = ["Main_Goal", "Sub_Goal", "Project", "Type", "Manager", "PM", "PD", "FE", "BE", "QA", "Target", "Comment", "Remarks"]
+    for c in potential_cols:
+        if c in plot_df.columns:
+            hover_cols.append(c)
+
     # Create Gantt Chart
     fig = px.timeline(
         plot_df, 
@@ -33,7 +40,7 @@ def render_roadmap(df: pd.DataFrame):
         x_end="End", 
         y="Squad", # Group by Squad on Y-axis
         color="Status",
-        hover_data=["Task", "Goal", "Status", "Start", "End"],
+        hover_data=hover_cols,
         color_discrete_map=color_discrete_map,
         category_orders={"Squad": list(plot_df['Squad'].unique())} # Respect sort order
     )
