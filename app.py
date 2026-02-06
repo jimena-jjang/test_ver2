@@ -4,6 +4,7 @@ from views import roadmap, analysis, data_ops
 from logic import process_data, apply_sorting, filter_data
 from gsheet_handler import load_data
 from squad_manager import sort_squads
+import utils
 
 # -----------------------------------------------------------------------------
 # PAGE CONFIG
@@ -55,6 +56,42 @@ if df is None:
     if uploaded_file:
         df = pd.read_excel(uploaded_file)
         df = process_data(df)
+
+# Resource File Uploader (New) & Google Sheet Connection
+st.sidebar.divider()
+st.sidebar.subheader("👥 Resource Data")
+
+res_source = st.sidebar.radio("Resource Source", ["File Upload", "Google Sheet"], horizontal=True)
+df_resource = None
+
+if res_source == "File Upload":
+    resource_file = st.sidebar.file_uploader("리소스 파일 업로드", type=['xlsx', 'xls'])
+    if resource_file:
+        df_resource = utils.load_resource_data(resource_file)
+
+else: # Google Sheet
+    # Default ID provided by user
+    default_res_id = "1XwHp_Lm7FQEmZzib8qJ1C1Q--ogCTKPXcHYhMlkE-Ts"
+    default_res_gid = "311390646"
+    
+    res_sheet_id = st.sidebar.text_input("GSheet ID (Resource)", value=default_res_id)
+    res_sheet_gid = st.sidebar.text_input("GSheet GID (Resource)", value=default_res_gid)
+    
+    # Use session state to persist load trigger
+    if st.sidebar.button("Load Resource Sheet"):
+        st.session_state['load_resource_triggered'] = True
+        
+    if st.session_state.get('load_resource_triggered') and res_sheet_id:
+        try:
+            # Load from GSheet using imported load_data function
+            raw_res_df = load_data(res_sheet_id, res_sheet_gid)
+            if raw_res_df is not None:
+                    # Process using utils
+                    df_resource = utils.process_resource_dataframe(raw_res_df)
+                    if df_resource is not None:
+                        st.sidebar.success("Resource Data Loaded!")
+        except Exception as e:
+            st.sidebar.error(f"Error loading Resource Sheet: {e}")
 
 # -----------------------------------------------------------------------------
 # MAIN CONTENT & SIDEBAR LOGIC
@@ -108,7 +145,10 @@ else:
         
         if page == "Analysis Report":
             st.title("📊 Analysis Report")
-            analysis.render_analysis_report(final_df)
+            if resource_file:
+                # Load resource data if uploaded
+                df_resource = utils.load_resource_data(resource_file)
+            analysis.render_analysis_report(final_df, df_resource)
 
         elif page == "Data Ops":
             st.title("🛠 Data Editor")

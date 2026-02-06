@@ -216,3 +216,75 @@ def identify_issues(df: pd.DataFrame) -> pd.DataFrame:
     issues['Issue_Type'] = 'Status Issue'
     
     return pd.concat([issues, overdue])
+
+def calculate_utilization_metrics(df_tasks: pd.DataFrame, df_resource: pd.DataFrame = None) -> pd.DataFrame:
+    """
+    Calculates utilization metrics per squad combining Task data and Resource data.
+    """
+    # 1. Base Workload from Tasks
+    if df_tasks.empty:
+        squad_summary = pd.DataFrame(columns=['Squad', 'Total_Tasks', 'Active_Tasks'])
+    else:
+        # Calculate Active Count: Start <= Today <= End
+        today_date = datetime.now()
+        
+        # Helper for active count
+        def get_active_count(group):
+            mask = (group['Start'] <= today_date) & ((group['End'] >= today_date) | pd.isna(group['End']))
+            return mask.sum()
+
+        squad_summary = df_tasks.groupby('Squad').agg(
+            Total_Tasks=('Task', 'count'),
+            Active_Tasks=('Start', lambda x: get_active_count(df_tasks.loc[x.index])) 
+            # Note: lambda x involves index lookup which is robust. 
+            # Simplified: filter active first then group count might be faster but this preserves all squads.
+        ).reset_index()
+
+        # Re-calc Active Tasks simpler way to avoid lambda complexity issues
+        active_mask = (df_tasks['Start'] <= today_date) & ((df_tasks['End'] >= today_date) | pd.isna(df_tasks['End']))
+        active_counts = df_tasks[active_mask].groupby('Squad').size().reset_index(name='Active_Tasks_Calc')
+        
+        # Merge to ensure 0 for no active tasks
+        squad_summary = pd.merge(squad_summary, active_counts, on='Squad', how='left')
+        squad_summary['Active_Tasks'] = squad_summary['Active_Tasks_Calc'].fillna(0)
+        squad_summary = squad_summary.drop(columns=['Active_Tasks_Calc'])
+
+    if df_resource is None or df_resource.empty:
+        # Return basic stats if no resource data, but ensure columns exist for UI consistency
+        squad_summary['Headcount'] = 0
+        squad_summary['Min_Personnel'] = 0
+        squad_summary['Capacity'] = 0.0
+        squad_summary['Load_Rate'] = 0.0
+        squad_summary['Balance'] = 0.0
+        return squad_summary
+
+    # 2. Merge with Resource Data
+    # df_resource expected columns: Squad, Headcount, Min_Personnel
+    merged = pd.merge(squad_summary, df_resource, on='Squad', how='left')
+    
+    # Fill missing resource info with defaults
+    merged['Headcount'] = merged['Headcount'].fillna(0)
+    merged['Min_Personnel'] = merged['Min_Personnel'].fillna(1.0) # Avoid div/0
+    
+    # 3. Calculate Metrics
+    def calc_row(row):
+        headcount = row['Headcount']
+        min_p = row['Min_Personnel'] if row['Min_Personnel'] > 0 else 1.0
+        active = row['Active_Tasks']
+        
+        # Capacity (How many tasks can be handled)
+        capacity = headcount / min_p
+        
+        # Load Rate
+        load_rate = active / capacity if capacity > 0 else 0
+        
+        # Balance (Headcount - Required)
+        required = active * min_p
+        balance = headcount - required
+        
+        return pd.Series([capacity, load_rate, balance])
+
+    merged[['Capacity', 'Load_Rate', 'Balance']] = merged.apply(calc_row, axis=1)
+    
+    return merged
+

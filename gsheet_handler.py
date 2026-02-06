@@ -29,7 +29,9 @@ def connect_to_sheet():
              # Fallback for local testing if credentials.json exists
             creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', SCOPE)
         else:
-            st.error("❌ Credentials not found! Please set up `.streamlit/secrets.toml` or place `credentials.json` in the root directory.")
+            st.error("❌ Google Sheets Connection Error: `gcp_service_account` not found in `secrets.toml` and `credentials.json` missing.")
+            # For debugging, list available keys (safe subset)
+            st.error(f"Available secrets keys: {list(st.secrets.keys())}")
             return None
             
         client = gspread.authorize(creds)
@@ -43,13 +45,24 @@ def load_data(sheet_url_or_id: str, worksheet_name: str = 0) -> pd.DataFrame:
     Loads data from a specific worksheet.
     worksheet_name can be an index (int) or name (str).
     """
+    st.toast("Connecting to Google Sheets...") # Feedback
     client = connect_to_sheet()
     if not client:
         return pd.DataFrame() # Return empty on failure
         
     try:
-        sheet = client.open_by_key(sheet_url_or_id) if len(sheet_url_or_id) > 20 else client.open(sheet_url_or_id)
+        # Try opening sheet
+        try:
+             sheet = client.open_by_key(sheet_url_or_id) if len(sheet_url_or_id) > 20 else client.open(sheet_url_or_id)
+        except gspread.SpreadsheetNotFound:
+             st.error(f"❌ Spreadsheet not found. Check ID: {sheet_url_or_id}")
+             return pd.DataFrame()
+        except Exception as e:
+             st.error(f"❌ Error opening spreadsheet: {e}")
+             return pd.DataFrame()
         
+        # Try finding worksheet
+        ws = None
         if isinstance(worksheet_name, int):
             ws = sheet.get_worksheet(worksheet_name)
         else:
@@ -63,15 +76,27 @@ def load_data(sheet_url_or_id: str, worksheet_name: str = 0) -> pd.DataFrame:
                     # Iterate to find matching GID
                     ws = next((w for w in sheet.worksheets() if w.id == target_gid), None)
                     if ws is None:
-                        raise gspread.WorksheetNotFound(f"GID {target_gid} not found")
+                        st.error(f"❌ Worksheet with GID {target_gid} not found.")
+                        return pd.DataFrame()
                 except ValueError:
-                     raise gspread.WorksheetNotFound(f"Worksheet '{worksheet_name}' not found")
-            
-        data = ws.get_all_records()
-        df = pd.DataFrame(data)
-        return df
+                     st.error(f"❌ Worksheet '{worksheet_name}' not found.")
+                     return pd.DataFrame()
+            except Exception as e:
+                 st.error(f"❌ Error finding worksheet: {e}")
+                 return pd.DataFrame()
+
+        if ws:     
+            st.toast("Fetching data...")
+            data = ws.get_all_records()
+            df = pd.DataFrame(data)
+            if df.empty:
+                 st.warning("⚠️ Worksheet is empty.")
+            return df
+        else:
+             return pd.DataFrame()
+
     except Exception as e:
-        st.error(f"Failed to load data: {e}")
+        st.error(f"Failed to load data (Unexpected): {e}")
         return pd.DataFrame()
 
 def save_snapshot(sheet_url_or_id: str, df: pd.DataFrame, master_worksheet_name: str = "Sheet1"):
@@ -83,7 +108,53 @@ def save_snapshot(sheet_url_or_id: str, df: pd.DataFrame, master_worksheet_name:
         return False
 
     try:
+        # Pre-connection check for sheet availability (though open happens later usually)
+        # Moved open logic here to fail fast if connection bad, 
+        # but the main safety is about data preparation.
+        
         sheet = client.open_by_key(sheet_url_or_id) if len(sheet_url_or_id) > 20 else client.open(sheet_url_or_id)
+        
+        # ---------------------------------------------------------------------
+        # SAFE SERIALIZATION LOGIC (CRITICAL FIX)
+        # ---------------------------------------------------------------------
+        # Create a copy to avoid modifying the displayed DF safely
+        df_to_save = df.copy()
+        
+        # [Fix] Convert Categorical types to Object to prevent "Cannot setitem with new category" error
+        # This allows inserting empty strings or new values that aren't in the original categories.
+        for col in df_to_save.columns:
+            if isinstance(df_to_save[col].dtype, pd.CategoricalDtype):
+                df_to_save[col] = df_to_save[col].astype(object)
+
+        # Helper to convert dates safely
+        def serialize_date(val):
+            if pd.isna(val) or val == "" or str(val).lower() == 'nat':
+                return ""
+            try:
+                if isinstance(val, (pd.Timestamp, datetime)):
+                    return val.strftime("%Y-%m-%d")
+                return str(val)[:10] # Fallback
+            except:
+                return ""
+
+        # Ensure all date columns are converted to strings properly
+        date_cols = ['Start', 'End']
+        for col in date_cols:
+            if col in df_to_save.columns:
+                 df_to_save[col] = df_to_save[col].apply(serialize_date)
+                 
+        # Fill strictly NaNs (for non-date columns) with empty string for JSON safety
+        df_to_save = df_to_save.fillna("")
+        
+        # Prepare the data payload FIRST (Validation Step)
+        # This converts DataFrame to the List[List] format gspread expects.
+        # If this fails (e.g. still some non-serializable object), exception raises HERE.
+        data_to_upload = [df_to_save.columns.values.tolist()] + df_to_save.values.tolist()
+        
+        # ---------------------------------------------------------------------
+        # DATA UPDATE (SAFE COMMIT)
+        # ---------------------------------------------------------------------
+        # Only reached if data preparation succeeded.
         
         # 1. Update Master Sheet
         try:
@@ -91,17 +162,17 @@ def save_snapshot(sheet_url_or_id: str, df: pd.DataFrame, master_worksheet_name:
         except:
             ws_master = sheet.get_worksheet(0) # Helper fallback
             
-        # Clear and update is simple but risky for formulas. 
-        # Requirement says: "sujung contents". Assuming we push the full DF.
+        # NOW it is safe to clear
         ws_master.clear()
-        ws_master.update([df.columns.values.tolist()] + df.values.tolist())
+        ws_master.update(data_to_upload)
         
         # 2. Create Snapshot
         snapshot_name = datetime.now().strftime("%Y-%m-%d_%H%M")
         try:
              ws_snapshot = sheet.add_worksheet(title=snapshot_name, rows=len(df)+100, cols=len(df.columns)+5)
-             ws_snapshot.update([df.columns.values.tolist()] + df.values.tolist())
+             ws_snapshot.update(data_to_upload)
         except Exception as e:
+            # Snapshot failure is non-critical, just warn
             st.warning(f"Snapshot creation failed (might already exist): {e}")
 
         return True

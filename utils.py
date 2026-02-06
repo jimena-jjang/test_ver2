@@ -250,14 +250,19 @@ def load_and_process_data(file):
         st.error(f"파일 로드 중 오류 발생: {e}")
         return None
 
-def load_resource_data(file):
-    """리소스(인원) 데이터 로드 Function"""
+    except Exception as e:
+        st.error(f"파일 로드 중 오류 발생: {e}")
+        return None
+
+def process_resource_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Validates and processes the resource DataFrame.
+    Expects columns related to 'Squad' and 'Headcount'.
+    """
     try:
-        df = pd.read_excel(file)
         df.columns = df.columns.astype(str).str.strip()
         
-        # 필수 컬럼: Squad, 보유 인원
-        # Robust case-insensitive search for 'Squad'
+        # 1. Normalize Squad Column
         target_squad_col = None
         for col in df.columns:
             if col.strip().lower() == 'squad':
@@ -270,10 +275,10 @@ def load_resource_data(file):
              df = df.rename(columns={'Squad (대분류)': 'Squad'})
              
         if 'Squad' not in df.columns:
-            st.error(f"리소스 파일에 'Squad' 컬럼이 없습니다. (현재 컬럼: {list(df.columns)})")
+            st.error(f"리소스 데이터에 'Squad' 컬럼이 없습니다. (현재 컬럼: {list(df.columns)})")
             return None
             
-        # 보유 인원 컬럼 찾기 (flexible matching)
+        # 2. Find Headcount and Min_Personnel Columns
         headcount_col = None
         min_personnel_col = None
         
@@ -284,30 +289,46 @@ def load_resource_data(file):
                 min_personnel_col = col
                 
         if not headcount_col:
-            st.error("리소스 파일에 '보유 인원' 관련 컬럼이 없습니다. (예: 보유 인원)")
-            return None
+            # Check for English headers just in case
+            if 'Headcount' in df.columns:
+                headcount_col = 'Headcount'
+            else:
+                st.error("리소스 데이터에 '보유 인원' 관련 컬럼이 없습니다. (예: 보유 인원)")
+                return None
             
-        # Select and Rename
+        # 3. Select and Rename
         cols_to_use = ['Squad', headcount_col]
         rename_map = {headcount_col: 'Headcount'}
         
         if min_personnel_col:
             cols_to_use.append(min_personnel_col)
             rename_map[min_personnel_col] = 'Min_Personnel'
+        elif 'Min_Personnel' in df.columns:
+            cols_to_use.append('Min_Personnel')
             
-        df = df[cols_to_use]
+        df = df[cols_to_use].copy()
         df = df.rename(columns=rename_map)
         
-        # Convert numeric, handle non-numeric (e.g. '-') as 0
+        # 4. Data Cleaning
         df['Headcount'] = pd.to_numeric(df['Headcount'], errors='coerce').fillna(0)
         
         if 'Min_Personnel' in df:
-            df['Min_Personnel'] = pd.to_numeric(df['Min_Personnel'], errors='coerce').fillna(1.0) # Default to 1 if missing/invalid
+            df['Min_Personnel'] = pd.to_numeric(df['Min_Personnel'], errors='coerce').fillna(1.0)
         else:
-            df['Min_Personnel'] = 1.0 # Default if column missing
+            df['Min_Personnel'] = 1.0
         
         return df
         
     except Exception as e:
-        st.error(f"리소스 파일 로드 중 오류 발생: {e}")
+        st.error(f"리소스 데이터 처리 중 오류 발생: {e}")
         return None
+
+def load_resource_data(file):
+    """리소스(인원) 엑셀 파일 로드 Function"""
+    try:
+        df = pd.read_excel(file)
+        return process_resource_dataframe(df)
+    except Exception as e:
+        st.error(f"리소스 파일 읽기 중 오류 발생: {e}")
+        return None
+
