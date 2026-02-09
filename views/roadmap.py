@@ -392,7 +392,7 @@ def create_professional_gantt(df, group_col='Squad'):
 
     fig.update_layout(
         width=chart_width,  # Explicitly Set Width
-        height=max(600, len(df_plot) * 60 + 100), 
+        height=max(600, len(df_plot) * 40 + 100), 
         xaxis=dict(
             type='date', 
             tickformat='%Y-%m', 
