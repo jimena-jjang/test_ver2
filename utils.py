@@ -309,6 +309,9 @@ def process_resource_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         df = df[cols_to_use].copy()
         df = df.rename(columns=rename_map)
         
+        if 'Squad' in df.columns:
+            df['Squad'] = df['Squad'].astype(str).str.strip().apply(lambda x: unicodedata.normalize('NFC', x))
+        
         # 4. Data Cleaning
         df['Headcount'] = pd.to_numeric(df['Headcount'], errors='coerce').fillna(0)
         

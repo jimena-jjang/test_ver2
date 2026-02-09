@@ -26,72 +26,81 @@ page = st.sidebar.radio("Navigation", ["Roadmap View", "Analysis Report", "Data 
 
 st.sidebar.divider()
 
-# Data Connection Settings (Mock or Secret)
+# -----------------------------------------------------------------------------
+# DATA CONNECTION SETTINGS
+# -----------------------------------------------------------------------------
 with st.sidebar.expander("🔌 Connection Settings", expanded=True):
-    # Load defaults from secrets.toml if available
+    # --- Roadmap Data Settings ---
+    st.markdown("### 📌 Roadmap Data")
     default_id = st.secrets.get("G_SHEET_ID", "")
     default_gid = st.secrets.get("G_SHEET_GID", "")
     
-    st.caption("기본값은 `secrets.toml` 또는 입력란에서 수정 가능합니다.")
+    sheet_id = st.text_input("GSheet ID", value=default_id, key="roadmap_id")
+    worksheet_name = st.text_input("Worksheet Name / GID", value=default_gid, key="roadmap_gid")
     
-    sheet_id = st.text_input("Google Sheet ID", value=default_id)
-    worksheet_name = st.text_input("Worksheet Name / GID", value=default_gid)
-    
-    if default_id and default_gid and sheet_id == default_id and worksheet_name == default_gid:
-         st.success("✅ 기본 설정이 로드되었습니다")
+    st.divider()
 
-# Load Data
+    # --- Resource Data Settings ---
+    st.markdown("### 👥 Resource Data")
+    res_source = st.radio("Source", ["Google Sheet", "File Upload"], horizontal=True, key="res_source_radio")
+    
+    if res_source == "Google Sheet":
+        default_res_id = st.secrets.get("RES_SHEET_ID", "")
+        default_res_gid = st.secrets.get("RES_SHEET_GID", "")
+        
+        res_sheet_id = st.text_input("GSheet ID (Resource)", value=default_res_id, key="res_id")
+        res_sheet_gid = st.text_input("GSheet GID (Resource)", value=default_res_gid, key="res_gid")
+        
+        load_res_btn = st.button("Load Resource Data", key="load_res_btn")
+    else:
+        resource_file = st.file_uploader("Upload Resource File", type=['xlsx', 'xls'], key="res_file")
+
+# -----------------------------------------------------------------------------
+# LOAD DATA LOGIC
+# -----------------------------------------------------------------------------
+
+# 1. Load Roadmap Data
 df = None
 if sheet_id:
-    with st.spinner("Loading data..."):
+    with st.spinner("Loading Roadmap data..."):
+        # load_data caches? If not, this might re-run on every interaction. 
+        # gsheet_handler.load_data should ideally be cached or st.cache_data used.
+        # For now, we follow existing pattern.
         raw_df = load_data(sheet_id, worksheet_name)
         if not raw_df.empty:
             df = process_data(raw_df)
         else:
-            st.sidebar.error("데이터 로드 실패")
+            st.sidebar.warning("Roadmap 데이터를 불러오지 못했습니다.")
 
-# Fallback: File Uploader if no sheet connected
+# Fallback: Roadmap File Uploader (only if no sheet loaded)
 if df is None:
-    uploaded_file = st.sidebar.file_uploader("또는 엑셀 파일 업로드", type=['xlsx', 'xls'])
+    st.sidebar.markdown("---")
+    uploaded_file = st.sidebar.file_uploader("또는 Roadmap 엑셀 업로드", type=['xlsx', 'xls'], key="roadmap_file")
     if uploaded_file:
         df = pd.read_excel(uploaded_file)
         df = process_data(df)
 
-# Resource File Uploader (New) & Google Sheet Connection
-st.sidebar.divider()
-st.sidebar.subheader("👥 Resource Data")
-
-res_source = st.sidebar.radio("Resource Source", ["File Upload", "Google Sheet"], horizontal=True)
+# 2. Load Resource Data
 df_resource = None
 
-if res_source == "File Upload":
-    resource_file = st.sidebar.file_uploader("리소스 파일 업로드", type=['xlsx', 'xls'])
-    if resource_file:
-        df_resource = utils.load_resource_data(resource_file)
+if res_source == "File Upload" and resource_file:
+    df_resource = utils.load_resource_data(resource_file)
 
-else: # Google Sheet
-    # Default ID provided by user
-    default_res_id = "1XwHp_Lm7FQEmZzib8qJ1C1Q--ogCTKPXcHYhMlkE-Ts"
-    default_res_gid = "311390646"
-    
-    res_sheet_id = st.sidebar.text_input("GSheet ID (Resource)", value=default_res_id)
-    res_sheet_gid = st.sidebar.text_input("GSheet GID (Resource)", value=default_res_gid)
-    
-    # Use session state to persist load trigger
-    if st.sidebar.button("Load Resource Sheet"):
-        st.session_state['load_resource_triggered'] = True
-        
-    if st.session_state.get('load_resource_triggered') and res_sheet_id:
+elif res_source == "Google Sheet":
+    # Auto-load if ID is present (uses cached load_data)
+    if res_sheet_id:
         try:
-            # Load from GSheet using imported load_data function
             raw_res_df = load_data(res_sheet_id, res_sheet_gid)
-            if raw_res_df is not None:
-                    # Process using utils
-                    df_resource = utils.process_resource_dataframe(raw_res_df)
-                    if df_resource is not None:
-                        st.sidebar.success("Resource Data Loaded!")
+            if not raw_res_df.empty:
+                df_resource = utils.process_resource_dataframe(raw_res_df)
+                if df_resource is not None:
+                     st.sidebar.success("Resource Data Loaded!")
+            else:
+                 pass
         except Exception as e:
-            st.sidebar.error(f"Error loading Resource Sheet: {e}")
+            st.sidebar.error(f"Error: {e}")
+
+
 
 # -----------------------------------------------------------------------------
 # MAIN CONTENT & SIDEBAR LOGIC
@@ -122,13 +131,8 @@ else:
         all_squads = sort_squads(all_squads) # Apply custom sort order
         selected_squads = st.sidebar.multiselect("Squad", all_squads, default=all_squads)
         
-        # Date Range
-        min_date = df['Start'].min() if 'Start' in df.columns and not df['Start'].isnull().all() else None
-        max_date = df['End'].max() if 'End' in df.columns and not df['End'].isnull().all() else None
-        
+        # Date Range Filter removed as per user request
         date_range = None
-        if min_date and max_date:
-            date_range = st.sidebar.date_input("Period", [min_date, max_date])
 
         # Sorting options
         st.sidebar.subheader("🔃 Sorting")
@@ -145,9 +149,7 @@ else:
         
         if page == "Analysis Report":
             st.title("📊 Analysis Report")
-            if resource_file:
-                # Load resource data if uploaded
-                df_resource = utils.load_resource_data(resource_file)
+            # if resource_file: logic removed as it is handled above.
             analysis.render_analysis_report(final_df, df_resource)
 
         elif page == "Data Ops":

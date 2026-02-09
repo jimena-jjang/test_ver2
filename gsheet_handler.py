@@ -40,12 +40,13 @@ def connect_to_sheet():
         st.error(f"Google Sheets connection failed: {e}")
         return None
 
+@st.cache_data(ttl=600)
 def load_data(sheet_url_or_id: str, worksheet_name: str = 0) -> pd.DataFrame:
     """
     Loads data from a specific worksheet.
     worksheet_name can be an index (int) or name (str).
     """
-    st.toast("Connecting to Google Sheets...") # Feedback
+    # st.toast("Connecting to Google Sheets...") # Removed to avoid CacheReplayClosureError
     client = connect_to_sheet()
     if not client:
         return pd.DataFrame() # Return empty on failure
@@ -56,9 +57,11 @@ def load_data(sheet_url_or_id: str, worksheet_name: str = 0) -> pd.DataFrame:
              sheet = client.open_by_key(sheet_url_or_id) if len(sheet_url_or_id) > 20 else client.open(sheet_url_or_id)
         except gspread.SpreadsheetNotFound:
              st.error(f"❌ Spreadsheet not found. Check ID: {sheet_url_or_id}")
+             # print(f"Spreadsheet not found: {sheet_url_or_id}")
              return pd.DataFrame()
         except Exception as e:
              st.error(f"❌ Error opening spreadsheet: {e}")
+             # print(f"Error opening spreadsheet: {e}")
              return pd.DataFrame()
         
         # Try finding worksheet
@@ -77,26 +80,31 @@ def load_data(sheet_url_or_id: str, worksheet_name: str = 0) -> pd.DataFrame:
                     ws = next((w for w in sheet.worksheets() if w.id == target_gid), None)
                     if ws is None:
                         st.error(f"❌ Worksheet with GID {target_gid} not found.")
+                        # print(f"Worksheet with GID {target_gid} not found.")
                         return pd.DataFrame()
                 except ValueError:
                      st.error(f"❌ Worksheet '{worksheet_name}' not found.")
+                     # print(f"Worksheet '{worksheet_name}' not found.")
                      return pd.DataFrame()
             except Exception as e:
                  st.error(f"❌ Error finding worksheet: {e}")
+                 # print(f"Error finding worksheet: {e}")
                  return pd.DataFrame()
 
         if ws:     
-            st.toast("Fetching data...")
+            # st.toast("Fetching data...")
             data = ws.get_all_records()
             df = pd.DataFrame(data)
             if df.empty:
                  st.warning("⚠️ Worksheet is empty.")
+                 # print("Worksheet is empty.")
             return df
         else:
              return pd.DataFrame()
 
     except Exception as e:
         st.error(f"Failed to load data (Unexpected): {e}")
+        # print(f"Failed to load data (Unexpected): {e}")
         return pd.DataFrame()
 
 def save_snapshot(sheet_url_or_id: str, df: pd.DataFrame, master_worksheet_name: str = "Sheet1"):

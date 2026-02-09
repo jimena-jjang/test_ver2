@@ -7,115 +7,171 @@ import textwrap
 def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None):
     # st.header("📊 데이터 분석 리포트") # Title handled in app.py
     
-    tab1, tab2, tab3, tab4 = st.tabs(["과부하 지수", "최단 시작일 예측", "Swap 시나리오", "이슈 트래킹"])
+    st.subheader("스쿼드별 업무 로드 및 리소스 분석")
     
-    with tab1:
-        st.subheader("스쿼드별 업무 로드 및 리소스 분석")
+    # Calculate Utilization Metrics
+    metrics_df = calculate_utilization_metrics(df, df_resource)
+    
+    if not metrics_df.empty:
+        # 1. Formula Explanation (Detailed Box)
+        explanation = """
+        **부하율 (%) = (진행중 과제수 ÷ 수행 능력) × 100**
         
-        # Calculate Utilization Metrics
-        metrics_df = calculate_utilization_metrics(df, df_resource)
+        각 항목의 상세 의미는 아래와 같습니다:
         
-        if not metrics_df.empty:
-            # 1. Formula Explanation (Expander)
-            with st.expander("ℹ️ 계산식 설명 (Formula Definitions)"):
-                st.markdown("""
-                - **Active Tasks**: 현재 진행 중인 과제 (진행 중 + 진행 예정 중 오늘 날짜 포함)
-                - **Capacity (적정 수행 능력)**: `보유 인원(Headcount)` / `과제당 최소 투입 인원(Min Personnel)`
-                - **Load Rate (부하율)**: `Active Tasks` / `Capacity` (100% 초과 시 과부하)
-                - **Balance (인력 공백)**: `Headcount` - (`Active Tasks` * `Min Personnel`)
-                """)
+        - **진행중 과제수 (Active Tasks)**
+            오늘 날짜를 기준으로 진행 중인 과제의 수입니다. 
+            *(시작일 ≤ 오늘 ≤ 종료일)*인 과제를 카운트합니다.
+        
+        - **수행 능력 (Capacity)**
+            스쿼드가 동시에 처리할 수 있는 적정 과제 수입니다.
+            계산식: `보유 인원 (Headcount)` ÷ `과제당 필요 인원 (Min Personnel)`
+            예: 9명의 인원이 있고, 과제당 5명이 필요하다면 → 수행 능력은 **1.8개**가 됩니다.
             
-            # 2. Key Metrics Visualization (Bar Chart with Load Rate color)
-            # Add Color column for load rate
-            def get_color(rate):
-                if rate >= 1.5: return '#FF4B4B' # Red (Severe)
-                if rate >= 1.0: return '#FFA500' # Orange (Warning)
-                return '#28a745' # Green (Good)
+        **[요약]**
+        즉, **"스쿼드가 현재 처리 가능한 능력(Capacity) 대비 실제로 얼마나 많은 과제(Active Tasks)를 맡고 있는지"**를 백분율로 나타낸 값입니다.
+        - **100% 초과**: 수행 능력보다 많은 일이 몰려있음 (과부하)
+        - **100% 미만**: 수행 능력 대비 여유가 있음
+        """
+        st.info(explanation)
+        
+        # 2. Key Metrics Visualization (Bar Chart with Load Rate color)
+        def get_color(rate):
+            if rate >= 1.5: return '#FF4B4B' # Red (Severe)
+            if rate >= 1.0: return '#FFA500' # Orange (Warning)
+            return '#28a745' # Green (Good)
 
-            metrics_df['Color'] = metrics_df['Load_Rate'].apply(get_color)
-            
-            # Enhanced Bar Chart
-            fig = px.bar(
-                metrics_df, 
-                x='Squad', 
-                y='Load_Rate',
-                title="스쿼드별 부하율 (Load Rate)",
-                text_auto='.0%'
-            )
-            fig.update_traces(
-                marker_color=metrics_df['Color'],
-                hovertemplate=(
-                    "<b>%{x}</b><br>" +
-                    "Load Rate: %{y:.0%}<br>" +
-                    "Active Tasks: %{customdata[0]}<br>" +
-                    "Capacity: %{customdata[1]:.1f}<br>" +
-                    "Headcount: %{customdata[2]}<br>" +
-                    "Min Personnel: %{customdata[3]}<extra></extra>"
+        metrics_df['Color'] = metrics_df['Load_Rate'].apply(get_color)
+        
+        # [User Request] Sort by Load Rate descending
+        metrics_df = metrics_df.sort_values(by='Load_Rate', ascending=False)
+        
+        # Enhanced Bar Chart
+        fig = px.bar(
+            metrics_df, 
+            x='Squad', 
+            y='Load_Rate',
+            title="스쿼드별 부하율 (Load Rate)", 
+            text_auto='.0%'
+        )
+        fig.update_traces(
+            marker_color=metrics_df['Color'],
+            hovertemplate=(
+                "<b>%{x}</b><br>" +
+                "Load Rate: %{y:.0%}<br>" +
+                "Active Tasks: %{customdata[0]}<br>" +
+                "Capacity: %{customdata[1]:.1f}<br>" +
+                "Headcount: %{customdata[2]}<br>" +
+                "Min Personnel: %{customdata[3]}<extra></extra>"
+            ),
+            customdata=metrics_df[['Active_Tasks', 'Capacity', 'Headcount', 'Min_Personnel']]
+        )
+        fig.add_hline(y=1.0, line_dash="dash", line_color="gray", annotation_text="100% Capacity")
+        fig.update_layout(yaxis_tickformat=".0%", height=400)
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # 3. Detailed Data Table
+        st.subheader("📋 상세 데이터")
+        
+        # Select columns for display
+        display_cols = ['Squad', 'Total_Tasks', 'Active_Tasks', 'Headcount', 'Min_Personnel', 'Capacity']
+        
+        st.dataframe(
+            metrics_df[display_cols],
+            column_config={
+                "Squad": st.column_config.TextColumn("스쿼드", disabled=True),
+                "Total_Tasks": st.column_config.NumberColumn(
+                    "총 과제수", 
+                    help="로드된 Roadmap 데이터 기준 전체 과제 개수"
                 ),
-                customdata=metrics_df[['Active_Tasks', 'Capacity', 'Headcount', 'Min_Personnel']]
-            )
-            fig.add_hline(y=1.0, line_dash="dash", line_color="gray", annotation_text="100% Capacity")
-            fig.update_layout(yaxis_tickformat=".0%", height=400)
-            
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # 3. Detailed Data Table with Tooltips (using Streamlit column config)
-            st.subheader("📋 상세 데이터")
-            
-            # Select columns for display
-            display_cols = ['Squad', 'Total_Tasks', 'Active_Tasks', 'Headcount', 'Min_Personnel', 'Capacity', 'Load_Rate', 'Balance']
-            
-            st.dataframe(
-                metrics_df[display_cols],
-                column_config={
-                    "Squad": "스쿼드",
-                    "Total_Tasks": st.column_config.NumberColumn("총 과제수", help="전체 등록된 과제 수"),
-                    "Active_Tasks": st.column_config.NumberColumn("진행중 과제수", help="현재 진행 중인 과제 (Start <= Today <= End)"),
-                    "Headcount": st.column_config.NumberColumn("보유 인원", help="리소스 파일 기준 인원"),
-                    "Min_Personnel": st.column_config.NumberColumn("필요 인원/Task", help="과제 1개당 최소 투입 인원"),
-                    "Capacity": st.column_config.NumberColumn("수행 능력", format="%.1f개", help="동시에 처리 가능한 적정 과제 수"),
-                    "Load_Rate": st.column_config.ProgressColumn("부하율", format="%.0f%%", min_value=0, max_value=2),
-                    "Balance": st.column_config.NumberColumn("인력 밸런스", format="%d명", help="양수: 여유, 음수: 부족")
-                },
-                hide_index=True,
-                use_container_width=True
-            )
-            
-        else:
-            st.info("데이터가 없습니다.")
+                "Active_Tasks": st.column_config.NumberColumn(
+                    "진행중 과제수", 
+                    help="오늘 날짜 기준 진행 중인 과제 수 (Start <= Today <= End)"
+                ),
+                "Headcount": st.column_config.NumberColumn(
+                    "보유 인원", 
+                    help="리소스 데이터(파일/시트)에 등록된 스쿼드별 총 인원"
+                ),
+                "Min_Personnel": st.column_config.NumberColumn(
+                    "필요 인원/Task", 
+                    help="리소스 데이터(파일/시트)의 'Min_Personnel' 기준. 과제 1개를 수행하는 데 필요한 최소 투입 인원 (기본값: 1명)"
+                ),
+                "Capacity": st.column_config.NumberColumn(
+                    "수행 능력", 
+                    format="%.1f개", 
+                    help="동시에 처리 가능한 적정 과제 수 (보유 인원 ÷ 필요 인원)"
+                )
+            },
+            hide_index=True,
+            use_container_width=True
+        )
+    else:
+        st.info("데이터가 없습니다.")
 
-    with tab2:
-        st.subheader("신규 과제 투입 가능일 예측")
-        squads = df['Squad'].unique()
-        selected_squad = st.selectbox("스쿼드 선택", squads)
-        if selected_squad:
-            prediction = predict_start_date(df, selected_squad)
-            st.metric(label=f"{selected_squad} 스쿼드 최단 시작 가능일", value=prediction.strftime("%Y-%m-%d"))
-            st.caption("※ 현재 진행 중인 마지막 과제의 종료일 다음 날을 기준으로 합니다.")
+    st.divider()
 
-    with tab3:
-        st.subheader("우선순위 변경 시나리오 (Swap)")
-        st.info("이 기능은 현재 진행 중인 과제와 대기 중인 과제 리스트를 보여줍니다.")
+    # 4. Shortest Start Date Prediction (Moved below Detailed Data)
+    st.subheader("📅 스쿼드별 최단 시작 가능일 예측")
+    
+    squads = df['Squad'].unique()
+    # Filter '미정', '공통' again if inconsistent, but df implies full data. logic.py filters metrics_df only.
+    # We should respect the filter for this view too.
+    filtered_squads = [s for s in squads if s not in ['미정', '공통']]
+    
+    # We need to ensure logic.predict_start_date is available. It is imported at the top.
+    
+    prediction_data = []
+    for squad in filtered_squads:
+        pred_date = predict_start_date(df, squad)
+        prediction_data.append({
+            "Squad": squad,
+            "Possible Start Date": pred_date
+        })
+    
+    if prediction_data:
+        pred_df = pd.DataFrame(prediction_data)
+        # Sort by date for better visibility
+        pred_df = pred_df.sort_values(by="Possible Start Date")
         
-        col_l, col_r = st.columns(2)
-        with col_l:
-            st.write("🏃 진행 중인 과제")
-            running = df[df['Status'] == '진행 중'][['Squad', 'Task', 'End']]
-            st.dataframe(running, use_container_width=True)
-            
-        with col_r:
-            st.write("⏳ 대기(진행 예정) 과제")
-            pending = df[df['Status'] == '진행 예정'][['Squad', 'Task', 'Start']]
-            st.dataframe(pending, use_container_width=True)
+        st.dataframe(
+            pred_df,
+            column_config={
+                "Squad": st.column_config.TextColumn("스쿼드"),
+                "Possible Start Date": st.column_config.DateColumn(
+                    "최단 시작 가능일",
+                    format="YYYY-MM-DD"
+                )
+            },
+            hide_index=True,
+            use_container_width=True
+        )
+        st.caption("※ 각 스쿼드의 현재 진행 중인 마지막 과제 종료일 다음 날을 기준으로 계산됩니다.")
+    else:
+        st.info("예측 가능한 스쿼드 데이터가 없습니다.")
 
-    with tab4:
-        st.subheader("⚠️ 이슈 및 지연 과제")
-        issues = identify_issues(df)
-        if not issues.empty:
-            st.error(f"총 {len(issues)}건의 이슈가 발견되었습니다.")
-            st.dataframe(issues[['Squad', 'Task', 'Status', 'End', 'Issue_Type']])
-        else:
-            st.success("발견된 이슈가 없습니다.")
+    st.divider()
+
+    # 5. Issue Tracking (Moved to bottom)
+    st.subheader("⚠️ 이슈 및 지연 과제 (Issue Tracking)")
+    # identify_issues is imported at the top.
+    issues = identify_issues(df)
+    
+    if not issues.empty:
+        st.error(f"총 {len(issues)}건의 이슈가 발견되었습니다.")
+        st.dataframe(
+            issues[['Squad', 'Task', 'Status', 'End', 'Issue_Type']], 
+            use_container_width=True,
+            column_config={
+                "Squad": "스쿼드",
+                "Task": "과제명",
+                "Status": "상태",
+                "End": st.column_config.DateColumn("종료일", format="YYYY-MM-DD"),
+                "Issue_Type": "이슈 유형"
+            }
+        )
+    else:
+        st.success("발견된 이슈가 없습니다.")
 
 # Mock for logic that wasn't fully defined in previous step or needs import fix
 # logic.py didn't include start_swap_scenario, so removing import or fixing usage.

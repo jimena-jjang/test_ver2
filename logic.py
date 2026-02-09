@@ -286,5 +286,8 @@ def calculate_utilization_metrics(df_tasks: pd.DataFrame, df_resource: pd.DataFr
 
     merged[['Capacity', 'Load_Rate', 'Balance']] = merged.apply(calc_row, axis=1)
     
+    # [User Request] Filter out '미정' and '공통' squads
+    merged = merged[~merged['Squad'].isin(['미정', '공통'])]
+
     return merged
 
