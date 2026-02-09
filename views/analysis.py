@@ -21,7 +21,7 @@ def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None):
         
         - **진행중 과제수 (Active Tasks)**
             오늘 날짜를 기준으로 진행 중인 과제의 수입니다. 
-            *(시작일 ≤ 오늘 ≤ 종료일)*인 과제를 카운트합니다.
+            *(시작일 ≤ 오늘 ≤ 종료일)* 또는 *상태가 '진행 중'*인 과제를 카운트합니다.
         
         - **수행 능력 (Capacity)**
             스쿼드가 동시에 처리할 수 있는 적정 과제 수입니다.
@@ -77,35 +77,86 @@ def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None):
         # Select columns for display
         display_cols = ['Squad', 'Total_Tasks', 'Active_Tasks', 'Headcount', 'Min_Personnel', 'Capacity']
         
-        st.dataframe(
-            metrics_df[display_cols],
-            column_config={
-                "Squad": st.column_config.TextColumn("스쿼드", disabled=True),
-                "Total_Tasks": st.column_config.NumberColumn(
-                    "총 과제수", 
-                    help="로드된 Roadmap 데이터 기준 전체 과제 개수"
-                ),
-                "Active_Tasks": st.column_config.NumberColumn(
-                    "진행중 과제수", 
-                    help="오늘 날짜 기준 진행 중인 과제 수 (Start <= Today <= End)"
-                ),
-                "Headcount": st.column_config.NumberColumn(
-                    "보유 인원", 
-                    help="리소스 데이터(파일/시트)에 등록된 스쿼드별 총 인원"
-                ),
-                "Min_Personnel": st.column_config.NumberColumn(
-                    "필요 인원/Task", 
-                    help="리소스 데이터(파일/시트)의 'Min_Personnel' 기준. 과제 1개를 수행하는 데 필요한 최소 투입 인원 (기본값: 1명)"
-                ),
-                "Capacity": st.column_config.NumberColumn(
-                    "수행 능력", 
-                    format="%.1f개", 
-                    help="동시에 처리 가능한 적정 과제 수 (보유 인원 ÷ 필요 인원)"
+        # Create 2 columns for Master-Detail view
+        col1, col2 = st.columns([1.2, 1])
+        
+        with col1:
+            st.markdown("###### 👈 스쿼드를 선택하여 상세 과제를 확인하세요")
+            
+            # Interactive Dataframe
+            selection = st.dataframe(
+                metrics_df[display_cols],
+                column_config={
+                    "Squad": st.column_config.TextColumn("스쿼드", disabled=True),
+                    "Total_Tasks": st.column_config.NumberColumn(
+                        "총 과제수", 
+                        help="로드된 Roadmap 데이터 기준 전체 과제 개수"
+                    ),
+                    "Active_Tasks": st.column_config.NumberColumn(
+                        "진행중 과제수", 
+                        help="오늘 날짜 기준 진행 중인 과제 수 (기간 내 또는 상태='진행 중')"
+                    ),
+                    "Headcount": st.column_config.NumberColumn(
+                        "보유 인원", 
+                        help="리소스 데이터(파일/시트)에 등록된 스쿼드별 총 인원"
+                    ),
+                    "Min_Personnel": st.column_config.NumberColumn(
+                        "필요 인원/Task", 
+                        help="리소스 데이터(파일/시트)의 'Min_Personnel' 기준. 과제 1개를 수행하는 데 필요한 최소 투입 인원 (기본값: 1명)"
+                    ),
+                    "Capacity": st.column_config.NumberColumn(
+                        "수행 능력", 
+                        format="%.1f개", 
+                        help="동시에 처리 가능한 적정 과제 수 (보유 인원 ÷ 필요 인원)"
+                    )
+                },
+                hide_index=True,
+                use_container_width=True,
+                on_select="rerun",
+                selection_mode="single-row"
+            )
+
+        with col2:
+            if selection and selection.selection.rows:
+                selected_index = selection.selection.rows[0]
+                selected_squad = metrics_df.iloc[selected_index]['Squad']
+                
+                st.markdown(f"###### 📌 {selected_squad} - 진행중 과제 목록")
+                
+                # Filter Active Tasks for selected squad
+                today_date = pd.Timestamp.now()
+                # Active Logic: (Date in range) OR (Status == '진행 중')
+                # AND Squad == selected_squad
+                
+                task_mask = (
+                    (df['Squad'] == selected_squad) &
+                    (
+                        ((df['Start'] <= today_date) & ((df['End'] >= today_date) | pd.isna(df['End']))) |
+                        (df['Status'] == '진행 중')
+                    )
                 )
-            },
-            hide_index=True,
-            use_container_width=True
-        )
+                
+                active_tasks_df = df[task_mask].copy()
+                
+                if not active_tasks_df.empty:
+                    # Sort by End date for relevance
+                    active_tasks_df = active_tasks_df.sort_values(by='End', na_position='last')
+                    
+                    st.dataframe(
+                        active_tasks_df[['Task', 'Main_Goal', 'Status', 'End']],
+                        column_config={
+                            "Task": "과제명",
+                            "Main_Goal": "목표 (Main Goal)",
+                            "Status": "상태",
+                            "End": st.column_config.DateColumn("종료일", format="YYYY-MM-DD")
+                        },
+                        hide_index=True,
+                        use_container_width=True
+                    )
+                else:
+                    st.info("해당 스쿼드에 진행 중인 과제가 없습니다.")
+            else:
+                st.info("👈 좌측 표에서 스쿼드를 선택하면 진행중인 과제 목록이 여기에 표시됩니다.")
     else:
         st.info("데이터가 없습니다.")
 
@@ -160,14 +211,15 @@ def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None):
     if not issues.empty:
         st.error(f"총 {len(issues)}건의 이슈가 발견되었습니다.")
         st.dataframe(
-            issues[['Squad', 'Task', 'Status', 'End', 'Issue_Type']], 
+            issues[['Squad', 'Task', 'Status', 'End', 'Issue_Type', 'Comment']], 
             use_container_width=True,
             column_config={
                 "Squad": "스쿼드",
                 "Task": "과제명",
                 "Status": "상태",
                 "End": st.column_config.DateColumn("종료일", format="YYYY-MM-DD"),
-                "Issue_Type": "이슈 유형"
+                "Issue_Type": "이슈 유형",
+                "Comment": "비고/설명"
             }
         )
     else:

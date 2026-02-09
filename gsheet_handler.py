@@ -40,6 +40,36 @@ def connect_to_sheet():
         st.error(f"Google Sheets connection failed: {e}")
         return None
 
+def _get_worksheet(sheet, worksheet_name):
+    """
+    Helper to find a worksheet by name, index, or GID.
+    """
+    try:
+        if isinstance(worksheet_name, int):
+            return sheet.get_worksheet(worksheet_name)
+        
+        # Try finding by name first
+        try:
+            return sheet.worksheet(worksheet_name)
+        except gspread.WorksheetNotFound:
+            pass
+            
+        # Try finding by GID (if it's a numeric string)
+        try:
+            target_gid = int(worksheet_name)
+            ws = next((w for w in sheet.worksheets() if w.id == target_gid), None)
+            if ws:
+                return ws
+        except ValueError:
+            pass
+            
+        st.error(f"❌ Worksheet '{worksheet_name}' not found.")
+        return None
+        
+    except Exception as e:
+        st.error(f"❌ Error finding worksheet: {e}")
+        return None
+
 @st.cache_data(ttl=600)
 def load_data(sheet_url_or_id: str, worksheet_name: str = 0) -> pd.DataFrame:
     """
@@ -47,6 +77,7 @@ def load_data(sheet_url_or_id: str, worksheet_name: str = 0) -> pd.DataFrame:
     worksheet_name can be an index (int) or name (str).
     """
     # st.toast("Connecting to Google Sheets...") # Removed to avoid CacheReplayClosureError
+    print(f"DEBUG: load_data called for {sheet_url_or_id} / {worksheet_name}")
     client = connect_to_sheet()
     if not client:
         return pd.DataFrame() # Return empty on failure
@@ -64,33 +95,13 @@ def load_data(sheet_url_or_id: str, worksheet_name: str = 0) -> pd.DataFrame:
              # print(f"Error opening spreadsheet: {e}")
              return pd.DataFrame()
         
+             st.error(f"❌ Error opening spreadsheet: {e}")
+             # print(f"Error opening spreadsheet: {e}")
+             return pd.DataFrame()
+        
         # Try finding worksheet
-        ws = None
-        if isinstance(worksheet_name, int):
-            ws = sheet.get_worksheet(worksheet_name)
-        else:
-            try:
-                # Try opening by name first
-                ws = sheet.worksheet(worksheet_name)
-            except gspread.WorksheetNotFound:
-                # If failed, check if it's a GID (numeric string or int)
-                try:
-                    target_gid = int(worksheet_name)
-                    # Iterate to find matching GID
-                    ws = next((w for w in sheet.worksheets() if w.id == target_gid), None)
-                    if ws is None:
-                        st.error(f"❌ Worksheet with GID {target_gid} not found.")
-                        # print(f"Worksheet with GID {target_gid} not found.")
-                        return pd.DataFrame()
-                except ValueError:
-                     st.error(f"❌ Worksheet '{worksheet_name}' not found.")
-                     # print(f"Worksheet '{worksheet_name}' not found.")
-                     return pd.DataFrame()
-            except Exception as e:
-                 st.error(f"❌ Error finding worksheet: {e}")
-                 # print(f"Error finding worksheet: {e}")
-                 return pd.DataFrame()
-
+        ws = _get_worksheet(sheet, worksheet_name)
+        
         if ws:     
             # st.toast("Fetching data...")
             data = ws.get_all_records()
@@ -127,6 +138,7 @@ def save_snapshot(sheet_url_or_id: str, df: pd.DataFrame, master_worksheet_name:
         # ---------------------------------------------------------------------
         # Create a copy to avoid modifying the displayed DF safely
         df_to_save = df.copy()
+        print(f"DEBUG: Saving data to {master_worksheet_name}. Shape: {df_to_save.shape}")
         
         # [Fix] Convert Categorical types to Object to prevent "Cannot setitem with new category" error
         # This allows inserting empty strings or new values that aren't in the original categories.
@@ -165,10 +177,12 @@ def save_snapshot(sheet_url_or_id: str, df: pd.DataFrame, master_worksheet_name:
         # Only reached if data preparation succeeded.
         
         # 1. Update Master Sheet
-        try:
-            ws_master = sheet.worksheet(master_worksheet_name)
-        except:
+        # 1. Update Master Sheet
+        ws_master = _get_worksheet(sheet, master_worksheet_name)
+        
+        if not ws_master:
             ws_master = sheet.get_worksheet(0) # Helper fallback
+            st.warning(f"Could not find worksheet '{master_worksheet_name}'. Saving to first worksheet '{ws_master.title}' instead.")
             
         # NOW it is safe to clear
         ws_master.clear()
@@ -182,6 +196,12 @@ def save_snapshot(sheet_url_or_id: str, df: pd.DataFrame, master_worksheet_name:
         except Exception as e:
             # Snapshot failure is non-critical, just warn
             st.warning(f"Snapshot creation failed (might already exist): {e}")
+
+            st.warning(f"Snapshot creation failed (might already exist): {e}")
+
+        # Clear cache to ensure next load gets fresh data
+        st.cache_data.clear()
+        print("DEBUG: Cache cleared after save.")
 
         return True
         

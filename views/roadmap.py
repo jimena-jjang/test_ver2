@@ -21,9 +21,52 @@ def create_professional_gantt(df, group_col='Squad'):
     # This ensures panel width is constant regardless of total duration.
     # -------------------------------------------------------------
     
+    # Determine Layout Logic based on Panel usage
+    primary_col = group_col
+    secondary_col = 'Squad' # Default
+    
+    # Resolve Secondary Column Logic
+    if primary_col == 'Squad':
+        if 'project_name' in df_plot.columns: secondary_col = 'project_name'
+        elif 'Group' in df_plot.columns: secondary_col = 'Group' 
+        elif 'Goal' in df_plot.columns: secondary_col = 'Goal'
+        else: secondary_col = None
+    elif primary_col == 'Group':
+        secondary_col = 'Squad'
+    else:
+        secondary_col = 'Squad'
+
+    # [Dynamic Panel Width Calculation]
+    # Calculate max length to adjust panel width
+    max_len_primary = 0
+    if not df_plot.empty and primary_col in df_plot.columns:
+        # Use visual width (Korean=2, English=1)
+        max_len_primary = df_plot[primary_col].astype(str).apply(utils.get_visual_width).max()
+        if pd.isna(max_len_primary): max_len_primary = 5
+        
+    # Heuristic: Base 80px + 11px per visual unit + 40px Padding. 
+    # (Visual unit 1 = approx 11px, Visual unit 2 (Korean) = approx 22px) -> More conservative
+    PADDING_PX = 40
+    calc_primary_px = 80 + (max_len_primary * 11) + PADDING_PX
+    SQUAD_PANEL_PX = max(140, min(600, int(calc_primary_px)))
+    
+    # Calculate max pixel width for wrapping
+    # We pass this to utils.wrap_text_by_pixels
+    primary_max_px = SQUAD_PANEL_PX - PADDING_PX
+
+    GROUP_PANEL_PX = 200 # Default
+    secondary_max_px = 160 # Default
+    
+    if secondary_col and secondary_col in df_plot.columns:
+        max_len_sec = df_plot[secondary_col].astype(str).apply(utils.get_visual_width).max()
+        if pd.isna(max_len_sec): max_len_sec = 5
+        
+        calc_sec_px = 80 + (max_len_sec * 11) + PADDING_PX
+        GROUP_PANEL_PX = max(140, min(600, int(calc_sec_px)))
+        secondary_max_px = GROUP_PANEL_PX - PADDING_PX
+
     PX_PER_DAY = 5  # Fixed scale: 5 pixels per 1 day
-    SQUAD_PANEL_PX = 140
-    GROUP_PANEL_PX = 200
+    # SQUAD_PANEL_PX & GROUP_PANEL_PX set dynamically above
     
     # Calculate Data Range
     data_min_date = df_plot['Start'].min()
@@ -39,20 +82,7 @@ def create_professional_gantt(df, group_col='Squad'):
     squad_days = SQUAD_PANEL_PX / PX_PER_DAY
     group_days = GROUP_PANEL_PX / PX_PER_DAY
     
-    # Determine Layout Logic based on Panel usage
-    primary_col = group_col
-    secondary_col = 'Squad' # Default
-    
-    # Resolve Secondary Column Logic
-    if primary_col == 'Squad':
-        if 'project_name' in df_plot.columns: secondary_col = 'project_name'
-        elif 'Group' in df_plot.columns: secondary_col = 'Group' 
-        elif 'Goal' in df_plot.columns: secondary_col = 'Goal'
-        else: secondary_col = None
-    elif primary_col == 'Group':
-        secondary_col = 'Squad'
-    else:
-        secondary_col = 'Squad'
+    # (Removed previous static column logic block from here as it's moved up)
 
     # Calculate Start Date for the Axis (Left edge of panels)
     # Axis Start = Data Start - (Panel Days)
@@ -114,7 +144,9 @@ def create_professional_gantt(df, group_col='Squad'):
         
     existing_sort_cols = [c for c in sort_cols if c and c in df_plot.columns]
     
-    df_plot = df_plot.sort_values(by=existing_sort_cols, ascending=[True] * len(existing_sort_cols))
+    if existing_sort_cols:
+         df_plot = df_plot.sort_values(by=existing_sort_cols, ascending=[True] * len(existing_sort_cols))
+         
     df_plot = df_plot.reset_index(drop=True)
     df_plot['row_idx'] = range(len(df_plot))
     
@@ -147,10 +179,14 @@ def create_professional_gantt(df, group_col='Squad'):
         # Text (Calculate center in time domain)
         center_date = primary_x0 + (primary_x1 - primary_x0) / 2
         
-        wrapped_text = utils.wrap_text_html(p_name, width=6)
+        # Dynamic Wrapping based on max pixel width
+        wrapped_text = utils.wrap_text_by_pixels(p_name, max_px=primary_max_px)
+        
         font_size = 13
-        if len(p_name) > 6: font_size = 12
-        if len(p_name) > 10: font_size = 10
+        p_len = len(str(p_name))
+        
+        # Adaptive font size (Simplified because wrapping handles resizing)
+        # if p_len > 40: font_size = 11
         
         fig.add_annotation(
             xref="x", yref="y",
@@ -187,10 +223,8 @@ def create_professional_gantt(df, group_col='Squad'):
             
             center_sec_date = sec_x0 + (sec_x1 - sec_x0) / 2
             
-            wrapped_sec_text = utils.wrap_text_html(s_val, width=10)
+            wrapped_sec_text = utils.wrap_text_by_pixels(s_val, max_px=secondary_max_px)
             sec_font_size = 11
-            if len(str(s_val)) > 10: sec_font_size = 10
-            if len(str(s_val)) > 15: sec_font_size = 9
             
             fig.add_annotation(
                 xref="x", yref="y",
@@ -358,7 +392,7 @@ def create_professional_gantt(df, group_col='Squad'):
 
     fig.update_layout(
         width=chart_width,  # Explicitly Set Width
-        height=max(600, len(df_plot) * 35 + 100), 
+        height=max(600, len(df_plot) * 60 + 100), 
         xaxis=dict(
             type='date', 
             tickformat='%Y-%m', 
@@ -416,20 +450,19 @@ def render_roadmap(df_original):
         # Exclude system columns that shouldn't be grouped by
         system_cols = ['Task', 'Start', 'End', 'Comment', 'Display_Date', 'Duration_Text', 'Tick_Label', 'Duration', 'row_idx']
         
-        # Always include Squad, then others found in df
-        potential_groups = [c for c in df_original.columns if c not in system_cols and c != 'Squad']
+        # [User Request] Keep original column order from data
+        group_options = [c for c in df_original.columns if c not in system_cols]
         
-        # Prioritize common ones if they exist
-        priority = ['Group', 'Goal', 'Status', 'Type'] 
-        sorted_others = sorted([c for c in potential_groups if c not in priority])
-        priority_present = [c for c in priority if c in potential_groups]
-        
-        group_options = ['Squad'] + priority_present + sorted_others
-        
-        # Default to 'Status' if present
+        # Ensure 'Squad' is present if implied (though it should be in df columns)
+        if 'Squad' not in group_options and 'Squad' in df_original.columns:
+            group_options.insert(0, 'Squad')
+            
+        # Default logic (Status or Squad)
         default_index = 0
         if 'Status' in group_options:
             default_index = group_options.index('Status')
+        elif 'Squad' in group_options:
+            default_index = group_options.index('Squad')
         
         selected_group_col = st.selectbox("정렬 기준 선택", group_options, index=default_index, label_visibility="collapsed")
         

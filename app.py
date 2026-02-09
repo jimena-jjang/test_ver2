@@ -29,7 +29,7 @@ st.sidebar.divider()
 # -----------------------------------------------------------------------------
 # DATA CONNECTION SETTINGS
 # -----------------------------------------------------------------------------
-with st.sidebar.expander("🔌 Connection Settings", expanded=True):
+with st.sidebar.expander("🔌 Connection Settings", expanded=False):
     # --- Roadmap Data Settings ---
     st.markdown("### 📌 Roadmap Data")
     default_id = st.secrets.get("G_SHEET_ID", "")
@@ -61,6 +61,7 @@ with st.sidebar.expander("🔌 Connection Settings", expanded=True):
 
 # 1. Load Roadmap Data
 df = None
+raw_df = None
 if sheet_id:
     with st.spinner("Loading Roadmap data..."):
         # load_data caches? If not, this might re-run on every interaction. 
@@ -68,7 +69,7 @@ if sheet_id:
         # For now, we follow existing pattern.
         raw_df = load_data(sheet_id, worksheet_name)
         if not raw_df.empty:
-            df = process_data(raw_df)
+            df = process_data(raw_df.copy()) # Use copy to preserve raw_df
         else:
             st.sidebar.warning("Roadmap 데이터를 불러오지 못했습니다.")
 
@@ -93,8 +94,8 @@ elif res_source == "Google Sheet":
             raw_res_df = load_data(res_sheet_id, res_sheet_gid)
             if not raw_res_df.empty:
                 df_resource = utils.process_resource_dataframe(raw_res_df)
-                if df_resource is not None:
-                     st.sidebar.success("Resource Data Loaded!")
+                # if df_resource is not None:
+                #      st.sidebar.success("Resource Data Loaded!")
             else:
                  pass
         except Exception as e:
@@ -154,12 +155,11 @@ else:
 
         elif page == "Data Ops":
             st.title("🛠 Data Editor")
-            # For Data Ops, we might want to show the RAW data or at least allow editing the filtered subset
-            # Typically editing is safer on the whole dataset or clearly marked.
-            # We will pass the processed DF but edits need to map back conceptually.
-            # Here we just pass the filtered view for editing, but note that saving might need careful handling if rows are hidden.
-            # The requirement says "Data Editor". We'll just pass final_df.
-            data_ops.render_data_ops(final_df, sheet_id)
+            # For Data Ops, we show the RAW data (raw_df) to prevent data loss and show original columns/order.
+            if raw_df is not None:
+                data_ops.render_data_ops(raw_df, sheet_id, worksheet_name)
+            else:
+                 st.info("데이터를 연결해주세요 (Google Sheet ID 또는 파일 업로드)")
 
     else:
         st.info("데이터를 연결해주세요 (Google Sheet ID 또는 파일 업로드)")

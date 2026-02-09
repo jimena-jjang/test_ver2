@@ -241,7 +241,11 @@ def calculate_utilization_metrics(df_tasks: pd.DataFrame, df_resource: pd.DataFr
         ).reset_index()
 
         # Re-calc Active Tasks simpler way to avoid lambda complexity issues
-        active_mask = (df_tasks['Start'] <= today_date) & ((df_tasks['End'] >= today_date) | pd.isna(df_tasks['End']))
+        # Active if: (Date in range) OR (Status is '진행 중')
+        active_mask = (
+            ((df_tasks['Start'] <= today_date) & ((df_tasks['End'] >= today_date) | pd.isna(df_tasks['End']))) |
+            (df_tasks['Status'] == '진행 중')
+        )
         active_counts = df_tasks[active_mask].groupby('Squad').size().reset_index(name='Active_Tasks_Calc')
         
         # Merge to ensure 0 for no active tasks

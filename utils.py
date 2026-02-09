@@ -69,8 +69,63 @@ def get_status_color(status):
     # 미리 정의되지 않은 상태는 해시 기반으로 색상 할당
     return FALLBACK_COLORS[hash(status) % len(FALLBACK_COLORS)]
 
+def get_visual_width(text):
+    """
+    Calculate visual width of text.
+    East Asian Width 'W', 'F', 'A' count as 2, others as 1.
+    """
+    width = 0
+    for char in str(text):
+        if unicodedata.east_asian_width(char) in ['F', 'W', 'A']:
+            width += 2
+        else:
+            width += 1
+    return width
+
+def wrap_text_by_pixels(text, max_px, font_size=12):
+    """
+    Wraps text ensuring each line does not exceed max_px.
+    Assumes:
+    - Wide char (Korean/CJK): ~1.8 * font_size (Safe for Arial Black/Bold)
+    - Narrow char (English/Num): ~0.95 * font_size
+    """
+    if not text: return ""
+    
+    str_text = str(text)
+    lines = []
+    current_line = []
+    current_px = 0
+    
+    # Constants for pixel estimation (Dynamic based on font size)
+    # Arial Black is very wide, so we use conservative multipliers
+    # INCREASED multipliers to force wrapping (V4 fix was insufficient)
+    PX_WIDE = int(font_size * 2.2)   
+    PX_NARROW = int(font_size * 1.2) 
+    
+    for char in str_text:
+        # Determine char width
+        is_wide = unicodedata.east_asian_width(char) in ['F', 'W', 'A']
+        char_px = PX_WIDE if is_wide else PX_NARROW
+        
+        # Check if adding char exceeds max_px
+        if current_px + char_px > max_px:
+            # Push current line and start new
+            if current_line:
+                lines.append("".join(current_line))
+            current_line = [char]
+            current_px = char_px
+        else:
+            current_line.append(char)
+            current_px += char_px
+            
+    if current_line:
+        lines.append("".join(current_line))
+        
+    return "<br>".join(lines)
+
 def wrap_text_html(text, width=40):
     if not text: return ""
+    # Fallback to character count based wrapping if needed, but prefer usage of wrap_text_by_pixels
     return "<br>".join(textwrap.wrap(str(text), width=width))
 
 def get_custom_squad_order():
