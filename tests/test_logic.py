@@ -26,10 +26,12 @@ def test_process_data(sample_df):
     assert 'Start' in sample_df.columns
     assert pd.api.types.is_datetime64_any_dtype(sample_df['Start'])
 
-def test_apply_sorting(sample_df):
-    # Default Sort: Squad Order (defined in logic) -> Order
-    # '전사공통' is first in SQUAD_DEFAULT_ORDER
-    # '회원', '커머스' follow. 'Unknown' last.
+from unittest.mock import patch
+
+@patch('logic.get_squad_order')
+def test_apply_sorting(mock_get_order, sample_df):
+    # Mock the order to ensure '전사공통' is first
+    mock_get_order.return_value = ['전사공통', '회원', '커머스']
     
     sorted_df = apply_sorting(sample_df)
     
