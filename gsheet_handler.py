@@ -6,6 +6,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import os
+import unicodedata
 
 # Scope for Google Sheets API
 SCOPE = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
@@ -205,6 +206,80 @@ def save_snapshot(sheet_url_or_id: str, df: pd.DataFrame, master_worksheet_name:
 
         return True
         
+        return False
+    
     except Exception as e:
         st.error(f"Failed to save data: {e}")
         return False
+
+@st.cache_data(ttl=600)
+def load_squad_order_from_sheet(sheet_id: str, worksheet_gid: str):
+    """
+    Loads squad order from a specific Google Sheet GID.
+    Expected columns: 'squad', 'order' (case-insensitive).
+    Returns a list of squad names sorted by order.
+    """
+    try:
+        # st.write(f"DEBUG: load_squad_order_from_sheet called for {sheet_id}, GID {worksheet_gid}")
+        
+        client = connect_to_sheet()
+        if not client:
+            st.error("DEBUG: Failed to connect to sheet.")
+            return []
+            
+        sheet = client.open_by_key(sheet_id)
+        
+        # Helper to find by GID with robust string comparison
+        ws = None
+        target_gid_str = str(worksheet_gid)
+        
+        try: 
+            all_ws = sheet.worksheets()
+            for w in all_ws:
+                if str(w.id) == target_gid_str:
+                    ws = w
+                    break
+                    
+            if not ws:
+                st.warning(f"DEBUG: Worksheet GID {worksheet_gid} not found. Available GIDs: {[w.id for w in all_ws]}")
+                return []
+                
+        except Exception as e:
+             st.error(f"DEBUG: Error iterating worksheets: {e}")
+             return []
+        
+        data = ws.get_all_records()
+        df = pd.DataFrame(data)
+        
+        if df.empty:
+            st.warning("DEBUG: Worksheet is empty.")
+            return []
+            
+        # Normalize columns
+        df.columns = df.columns.astype(str).str.strip().str.lower()
+        
+        # Identify relevant columns
+        squad_col = next((c for c in df.columns if 'squad' in c or '스쿼드' in c), None)
+        order_col = next((c for c in df.columns if 'order' in c or '순서' in c or '정렬' in c), None)
+        
+        if not squad_col:
+            st.error(f"DEBUG: Squad column not found. Columns: {df.columns.tolist()}")
+            return []
+            
+        # If order column exists, sort by it. Otherwise, assume file order.
+        if order_col:
+            df[order_col] = pd.to_numeric(df[order_col], errors='coerce').fillna(9999)
+            df = df.sort_values(by=order_col)
+        
+        # Extract unique squads
+        squad_list = df[squad_col].dropna().astype(str).str.strip().unique().tolist()
+        
+        # Normalize NFC
+        squad_list = [unicodedata.normalize('NFC', s) for s in squad_list]
+        
+        # st.success(f"DEBUG: Loaded {len(squad_list)} squads.")
+        return squad_list
+        
+    except Exception as e:
+        st.error(f"DEBUG: Fatal error loading squad order: {e}")
+        return []

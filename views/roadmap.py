@@ -119,18 +119,23 @@ def create_professional_gantt(df, group_col='Squad'):
         fig.add_shape(type="rect", x0=axis_min_date, x1=vis_max_date, y0=idx - 0.4, y1=idx + 0.4,
                       fillcolor=stripe_color, line=dict(width=0), layer="below")
     
-    # Sort Logic
-    # [Robust Fix] Create a rank column based on the custom order file
+    
+    # 1. Custom Order (from Google Sheet or File)
     custom_order = utils.get_custom_squad_order()
     
     if custom_order:
         # Normalize keys for robust matching
-        rank_map = {unicodedata.normalize('NFC', s): i for i, s in enumerate(custom_order)}
+        # Use a high number for undefined squads to put them at the end
+        rank_map = {unicodedata.normalize('NFC', str(s)).strip(): i for i, s in enumerate(custom_order)}
         
-        df_plot['squad_rank'] = df_plot['Squad'].astype(str).apply(
-            lambda x: rank_map.get(unicodedata.normalize('NFC', x), 999)
-        )
+        def get_squad_rank(squad_name):
+            norm_name = unicodedata.normalize('NFC', str(squad_name)).strip()
+            # If found in map, return rank. Else return 999.
+            return rank_map.get(norm_name, 999)
+            
+        df_plot['squad_rank'] = df_plot['Squad'].apply(get_squad_rank)
     else:
+        # Fallback: '공통' first, others 999 (effective alphabetical if sort includes name)
         df_plot['squad_rank'] = df_plot['Squad'].astype(str).apply(
             lambda x: 0 if '공통' in unicodedata.normalize('NFC', x) else 999
         )
@@ -200,9 +205,20 @@ def create_professional_gantt(df, group_col='Squad'):
         
         # Separator
         if min_idx > 0:
+            # Existing panel separator (white gap for panel)
             fig.add_shape(type="line", xref="x", yref="y",
                           x0=primary_x0, x1=primary_x1, y0=min_idx - 0.5, y1=min_idx - 0.5,
                           line=dict(color="white", width=4), layer="above")
+            
+            # [Visual Improvement] Global Separator Line between Groups
+            # Changed layer to 'above' to ensure it's not hidden by background
+            # Made color darker for better visibility
+            # Use xref='paper' to guarantee it spans the entire view width
+            fig.add_shape(type="line", xref="paper", yref="y",
+                          x0=0, x1=1, 
+                          y0=min_idx - 0.5, y1=min_idx - 0.5,
+                          line=dict(color="#333333", width=2, dash="solid"), 
+                          layer="above")
     
     # 2-2. Secondary Panel Draw
     if secondary_col:
@@ -242,6 +258,30 @@ def create_professional_gantt(df, group_col='Squad'):
                               x0=sec_x0, x1=sec_x1, 
                               y0=min_idx - 0.5, y1=min_idx - 0.5,
                               line=dict(color="#CCCCCC", width=1), layer="above")
+
+    # [New Feature] Sub-Group Separator (Squad Separator when grouped by Status/etc)
+    # If the primary column is NOT Squad, we still want to see separators between Squads.
+    if primary_col != 'Squad':
+        # Iterate through rows to find where Squad changes
+        for i in range(1, len(df_plot)):
+            # Check if Squad changed from previous row
+            curr_squad = df_plot.iloc[i]['Squad']
+            prev_squad = df_plot.iloc[i-1]['Squad']
+            
+            # Check if Primary Group also changed (we already have a line there from the main loop)
+            # We only want to add *extra* lines if the primary group didn't change but the squad did.
+            curr_primary = df_plot.iloc[i][primary_col]
+            prev_primary = df_plot.iloc[i-1][primary_col]
+            
+            if curr_squad != prev_squad and curr_primary == prev_primary:
+                 # Draw a separator
+                 # We use a slightly different style (e.g. thinner/lighter) or same?
+                 # User requested "separator", let's use a clear grey line.
+                 fig.add_shape(type="line", xref="paper", yref="y",
+                          x0=0, x1=1, 
+                          y0=i - 0.5, y1=i - 0.5,
+                          line=dict(color="#999999", width=1, dash="longdash"), # Distinct from main block
+                          layer="below") # Below to not obscure text, but visible on background
 
     # [Important] Update Layout with explicit width and range
 

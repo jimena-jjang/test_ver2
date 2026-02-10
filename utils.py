@@ -134,7 +134,19 @@ def get_custom_squad_order():
     2순위: Squad 정렬순서.xlsx (파일 내 등장 순서)
     """
     try:
-        # 1. [master]squad order.xlsx 확인
+        # 0. [New] Google Sheet Order (Priority 1)
+        from gsheet_handler import load_squad_order_from_sheet
+        SHEET_ID = '1XwHp_Lm7FQEmZzib8qJ1C1Q--ogCTKPXcHYhMlkE-Ts'
+        GID = '2103927428'
+        
+        sheet_order = load_squad_order_from_sheet(SHEET_ID, GID)
+        if sheet_order:
+            print(f"DEBUG: Loaded {len(sheet_order)} squads from Sheet.")
+            return sheet_order
+        else:
+            print("DEBUG: Google Sheet returned empty squad order.")
+
+        # 1. [master]squad order.xlsx 확인 (Fallback)
         master_file = '[master]squad order.xlsx'
         if os.path.exists(master_file):
             df_master = pd.read_excel(master_file)
