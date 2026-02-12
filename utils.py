@@ -18,7 +18,7 @@ STATUS_CONFIG = {
     '진행 예정': {
         'border': '#8B5CF6', 'fill': '#8B5CF6', 'style': 'solid', 'icon': '', 'text_color': 'white' # Purple
     },
-    '보류/이슈': {
+    '이슈': {
         'border': '#EF4444', 'fill': 'rgba(239, 68, 68, 0.7)', 'style': 'dashed', 'icon': '⚠️', 'text_color': 'white' # Red
     },
     '단순 인입': {
@@ -256,7 +256,7 @@ def load_and_process_data(file):
         df['Status'] = df['Status'].fillna('진행 예정')
         
         # Status 정렬 로직 (진행중 > 진행예정 > 진행완료 > 미정 > Drop)
-        status_priority = ['진행 중', '진행 예정', '진행 완료', '미정', '보류/이슈', 'DROP', '단순 인입']
+        status_priority = ['진행 중', '진행 예정', '진행 완료', '미정', '이슈', 'DROP', '단순 인입']
         # Normalize priority list
         status_priority = [unicodedata.normalize('NFC', s) for s in status_priority]
         

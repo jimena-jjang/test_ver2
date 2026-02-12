@@ -13,7 +13,7 @@ def sample_df():
     data = {
         'Squad': ['회원', '커머스', 'Unknown', '전사공통'],
         'Task': ['Task1', 'Task2', 'Task3', 'Task4'],
-        'Status': ['진행 중', '진행 완료', '보류/이슈', '진행 예정'],
+        'Status': ['진행 중', '진행 완료', '이슈', '진행 예정'],
         'Start': ['2023-01-01', '2023-01-05', '2023-01-10', '2023-02-01'],
         'End': ['2023-01-10', '2023-01-15', '2023-01-20', '2023-02-10'],
         'Order': [2, 1, 3, 0]
@@ -48,13 +48,12 @@ def test_predict_start_date(sample_df):
 
 def test_identify_issues(sample_df):
     issues = identify_issues(sample_df)
-    # Task3 is '보류/이슈'
+    # Task3 is '이슈'
     assert 'Task3' in issues['Task'].values
     
-    # Task1 is 'Start' 2023-01-01, End 2023-01-10. If today is later, it might be overdue?
-    # Logic implementation check:
-    # Overdue: End < Today AND Status not in [Done, DROP, Issue]
-    # Task1 is '진행 중' and End is 2023-01-10. If we run this test now (2025), it should be overdue.
+    # Verify Issue Type
+    task3 = issues[issues['Task'] == 'Task3'].iloc[0]
+    assert task3['Issue_Type'] == 'Status Issue'
     
-    # Mocking today is hard without injection, but 'Task1' should definitely be overdue in 2025/2026.
-    assert 'Task1' in issues[issues['Issue_Type'] == 'Overdue']['Task'].values
+    # Overdue logic was removed, so Task1 (Overdue) should NOT be in issues
+    assert 'Task1' not in issues['Task'].values

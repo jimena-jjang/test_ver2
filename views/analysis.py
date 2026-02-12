@@ -204,7 +204,7 @@ def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None):
     st.divider()
 
     # 5. Issue Tracking (Moved to bottom)
-    st.subheader("⚠️ 이슈 및 지연 과제 (Issue Tracking)")
+    st.subheader("⚠️ 주요 이슈 및 전략 과제 (Key Issues & Strategic Tasks)")
     # identify_issues is imported at the top.
     issues = identify_issues(df)
     

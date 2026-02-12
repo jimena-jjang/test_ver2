@@ -459,7 +459,9 @@ def create_professional_gantt(df, group_col='Squad'):
     )
 
     # Legend Logic
-    legend_status = ['진행 완료', '진행 중', '진행 예정', '보류/이슈', 'DROP', '단순 인입']
+    # Status 정렬 로직 (진행중 > 진행예정 > 진행완료 > 미정 > Drop)
+    status_priority = ['진행 중', '진행 예정', '진행 완료', '미정', '이슈', 'DROP', '단순 인입']
+    legend_status = ['진행 완료', '진행 중', '진행 예정', '이슈', 'DROP', '단순 인입']
     for status in legend_status:
         style = utils.get_status_style(status)
         fill_color = style.get('fill', 'white')
@@ -628,7 +630,7 @@ def render_roadmap(df_original):
         ("진행 완료", status_counts.get('진행 완료', 0), utils.STATUS_CONFIG['진행 완료']['border']),
         ("진행 중", status_counts.get('진행 중', 0), utils.STATUS_CONFIG['진행 중']['border']),
         ("진행 예정", status_counts.get('진행 예정', 0), utils.STATUS_CONFIG['진행 예정']['border']),
-        ("보류/이슈", status_counts.get('보류/이슈', 0), utils.STATUS_CONFIG['보류/이슈']['border']),
+        ("이슈", status_counts.get('이슈', 0), utils.STATUS_CONFIG['이슈']['border']),
         ("단순 인입", status_counts.get('단순 인입', 0), utils.STATUS_CONFIG['단순 인입']['border']),
         ("DROP", status_counts.get('DROP', 0), utils.STATUS_CONFIG['DROP']['border']),
     ]

@@ -11,7 +11,7 @@ STATUS_CONFIG = {
     '진행 완료': {'color': '#10B981'},
     '진행 중': {'color': '#3B82F6'},
     '진행 예정': {'color': '#8B5CF6'},
-    '보류/이슈': {'color': '#EF4444'},
+    '이슈': {'color': '#EF4444'},
     '단순 인입': {'color': '#64748B'},
     'DROP': {'color': '#1F2937'},
 }
@@ -19,7 +19,7 @@ STATUS_CONFIG = {
 STATUS_ORDER = [
     '진행 중',
     '진행 예정',
-    '보류/이슈',
+    '이슈',
     '단순 인입',
     '진행 완료',
     'DROP'
@@ -202,20 +202,67 @@ def predict_start_date(df: pd.DataFrame, squad: str) -> datetime:
 
 def identify_issues(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Returns tasks that are defined as issues.
+    Returns tasks that are defined as issues or strategic tasks.
+    Prioritizes '보류/이슈' Status first, then '전략과제'.
     """
-    # Assuming '보류/이슈' status or maybe overdue tasks
-    issues = df[df['Status'] == '보류/이슈'].copy()
+    # 1. Status Issue
+    status_issues = df[df['Status'] == '이슈'].copy()
+    status_issues['Issue_Type'] = 'Status Issue'
     
-    # You could also add logic for overdue tasks: End < Today and Status != Done
-    today = pd.Timestamp.now()
-    overdue_mask = (df['End'] < today) & (~df['Status'].isin(['진행 완료', 'DROP', '보류/이슈']))
-    overdue = df[overdue_mask].copy()
-    overdue['Issue_Type'] = 'Overdue'
+    # 2. Strategic Tasks (Only if Status == '단순 인입')
+    strategic_tasks = pd.DataFrame()
+    if 'Biz_impact' in df.columns:
+        is_strategic = df['Biz_impact'].astype(str).str.contains('전략과제', na=False)
+        is_simple = df['Status'] == '단순 인입'
+        
+        strategic_mask = is_strategic & is_simple
+        strategic_tasks = df[strategic_mask].copy()
+        strategic_tasks['Issue_Type'] = 'Strategic Task'
+
+    # Combine
+    # Note: If a task is both, it appears in both dfs. 
+    # But '이슈' status tasks are already captured in status_issues.
+    # The strategic_tasks df only has '단순 인입' status, so no overlap with '이슈' status.
+    # We can safely concat or use mask union.
     
-    issues['Issue_Type'] = 'Status Issue'
+    # Mask 1: Status Issue
+    mask_status = df['Status'] == '이슈'
     
-    return pd.concat([issues, overdue])
+    # Mask 2: Strategic & Simple
+    mask_strategic = False
+    if 'Biz_impact' in df.columns:
+        mask_strategic = (df['Biz_impact'].astype(str).str.contains('전략과제', na=False)) & (df['Status'] == '단순 인입')
+        
+    # Combined Mask
+    final_mask = mask_status | mask_strategic
+    
+    if not isinstance(final_mask, bool) and not final_mask.any(): # Handle empty or all False
+         return pd.DataFrame()
+         
+    issues = df[final_mask].copy()
+    
+    # Define Issue Type and Sort Order
+    # We want Status Issue at top.
+    
+    def get_issue_type_sort(row):
+        is_status_issue = row['Status'] == '이슈'
+        is_strategic_simple = ('전략과제' in str(row.get('Biz_impact', ''))) and (row['Status'] == '단순 인입')
+        
+        if is_status_issue:
+            return 0, 'Status Issue' # High Priority
+        elif is_strategic_simple:
+            return 1, 'Strategic Task'
+        return 2, 'Other'
+
+    # Apply to create sort key and label
+    applied = issues.apply(get_issue_type_sort, axis=1, result_type='expand')
+    issues['Sort_Key'] = applied[0]
+    issues['Issue_Type'] = applied[1]
+    
+    # Sort
+    issues = issues.sort_values(by=['Sort_Key', 'End'], ascending=[True, True])
+    
+    return issues
 
 def calculate_utilization_metrics(df_tasks: pd.DataFrame, df_resource: pd.DataFrame = None) -> pd.DataFrame:
     """
