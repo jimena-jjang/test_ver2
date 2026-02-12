@@ -48,8 +48,8 @@ def process_data(df: pd.DataFrame) -> pd.DataFrame:
         'order': 'Order', '정렬 순서': 'Order',
         
         # New columns from [Master] CTO office Roadmap (2).xlsx
-        'main_goal': 'Main_Goal',
-        'sub_goal': 'Sub_Goal',
+        'Biz_impact': 'Biz_impact', 'main_goal': 'Biz_impact', 'Main_Goal': 'Biz_impact',
+        'Product_track': 'Product_track', 'sub_goal': 'Product_track', 'Sub_Goal': 'Product_track',
         
         'project_name': 'Project',
         'type': 'Type',
@@ -64,11 +64,11 @@ def process_data(df: pd.DataFrame) -> pd.DataFrame:
     df = df.rename(columns=rename_dict)
     
     # Handle Goal column logic
-    if 'Sub_Goal' in df.columns and 'Goal' not in df.columns:
-        df['Goal'] = df['Sub_Goal']
+    if 'Product_track' in df.columns and 'Goal' not in df.columns:
+        df['Goal'] = df['Product_track']
     
     # Normalize strings
-    string_cols = ['Squad', 'Task', 'Status', 'Goal', 'Main_Goal', 'Sub_Goal', 'Project', 'Type', 'Comment', 'Target', 'Manager', 'PM', 'PD', 'FE', 'BE', 'QA', 'Remarks']
+    string_cols = ['Squad', 'Task', 'Status', 'Goal', 'Biz_impact', 'Product_track', 'Project', 'Type', 'Comment', 'Target', 'Manager', 'PM', 'PD', 'FE', 'BE', 'QA', 'Remarks']
     for col in string_cols:
         if col in df.columns:
             df[col] = df[col].astype(str).str.strip().apply(lambda x: unicodedata.normalize('NFC', x) if isinstance(x, str) else x)

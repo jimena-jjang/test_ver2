@@ -143,10 +143,10 @@ def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None):
                     active_tasks_df = active_tasks_df.sort_values(by='End', na_position='last')
                     
                     st.dataframe(
-                        active_tasks_df[['Task', 'Main_Goal', 'Status', 'End']],
+                        active_tasks_df[['Task', 'Biz_impact', 'Status', 'End']],
                         column_config={
                             "Task": "과제명",
-                            "Main_Goal": "목표 (Main Goal)",
+                            "Biz_impact": "비즈니스 임팩트 (Biz Impact)",
                             "Status": "상태",
                             "End": st.column_config.DateColumn("종료일", format="YYYY-MM-DD")
                         },
