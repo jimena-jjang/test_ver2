@@ -8,7 +8,7 @@ def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None):
     # Top Action Bar
     col_action, _ = st.columns([0.2, 0.8])
     with col_action:
-        if st.button("🔄 데이터 새로고침", key="analysis_refresh"):
+        if st.button("🔄 원본 데이터 불러오기", key="analysis_refresh"):
             st.cache_data.clear()
             st.rerun()
 

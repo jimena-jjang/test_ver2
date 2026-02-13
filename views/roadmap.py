@@ -12,6 +12,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import utils
 
+@st.cache_data(ttl=3600, show_spinner="차트를 생성 중입니다...")
 def create_professional_gantt(df, group_col='Squad'):
     """Gantt 차트 생성 로직"""
     df_plot = df.copy()
@@ -529,7 +530,7 @@ def render_roadmap(df_original):
     # Top Action Bar
     col_action, _ = st.columns([0.2, 0.8])
     with col_action:
-        if st.button("🔄 데이터 새로고침", key="roadmap_refresh"):
+        if st.button("🔄 원본 데이터 불러오기", key="roadmap_refresh"):
             st.cache_data.clear()
             st.rerun()
 
