@@ -220,6 +220,17 @@ def create_professional_gantt(df, group_col='Squad'):
                           line=dict(color="#333333", width=2, dash="solid"), 
                           layer="above")
     
+    # [Fix] Add a final bottom line to close the table visually
+    # The loop above draws lines *between* groups (top of each group starting from index > 0)
+    # We need one at the very bottom of the entire chart.
+    total_rows = len(df_plot)
+    if total_rows > 0:
+        fig.add_shape(type="line", xref="paper", yref="y",
+                      x0=0, x1=1, 
+                      y0=total_rows - 0.5, y1=total_rows - 0.5,
+                      line=dict(color="#333333", width=2, dash="solid"), 
+                      layer="above")
+
     # 2-2. Secondary Panel Draw
     if secondary_col:
         secondary_groups = df_plot.groupby([primary_col, secondary_col], sort=False)
@@ -333,6 +344,24 @@ def create_professional_gantt(df, group_col='Squad'):
                 textfont=dict(size=12, color="black"),
                 showlegend=False,
                 hoverinfo='skip'
+            ))
+            
+            # [Fix] Add Status Badge for Markers as well
+            annotations.append(dict(
+                x=today_val,
+                y=idx - 0.4, # Top edge like bars
+                text=f"<b>{status}</b>",
+                showarrow=False,
+                xanchor='left',
+                yanchor='middle',
+                xshift=0, 
+                yshift=0,
+                font=dict(color='white', size=10, family="Arial"),
+                bgcolor=fill_color,
+                bordercolor=fill_color,
+                borderwidth=1,
+                borderpad=2,
+                opacity=1.0
             ))
             continue # Done for this row
             
@@ -460,8 +489,21 @@ def create_professional_gantt(df, group_col='Squad'):
 
     # Legend Logic
     # Status 정렬 로직 (진행중 > 진행예정 > 진행완료 > 미정 > Drop)
-    status_priority = ['진행 중', '진행 예정', '진행 완료', '미정', '이슈', 'DROP', '단순 인입']
-    legend_status = ['진행 완료', '진행 중', '진행 예정', '이슈', 'DROP', '단순 인입']
+    # [Dynamic Legend] Use all statuses present in the data
+    all_statuses = sorted(df_plot['Status'].unique().tolist())
+    
+    # Priority for sorting legend
+    sort_priority = ['진행 중', '진행 예정', '진행 완료', '미정', '이슈', '보류', 'DROP', '단순 인입']
+    
+    # Sort: Priority ones first, then others alphabetically
+    def get_status_rank(s):
+        norm_s = unicodedata.normalize('NFC', s).strip()
+        if norm_s in sort_priority:
+            return sort_priority.index(norm_s)
+        return 999
+        
+    legend_status = sorted(all_statuses, key=lambda x: (get_status_rank(x), x))
+
     for status in legend_status:
         style = utils.get_status_style(status)
         fill_color = style.get('fill', 'white')
@@ -484,8 +526,16 @@ def create_professional_gantt(df, group_col='Squad'):
     return fig
 
 def render_roadmap(df_original):
+    # Top Action Bar
+    col_action, _ = st.columns([0.2, 0.8])
+    with col_action:
+        if st.button("🔄 데이터 새로고침", key="roadmap_refresh"):
+            st.cache_data.clear()
+            st.rerun()
+
     # Sidebar Filters
     with st.sidebar:
+
         st.header("📂 정렬 기준")
         
         # 1. Group By (Dynamic based on Excel columns)

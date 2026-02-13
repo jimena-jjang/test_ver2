@@ -189,25 +189,22 @@ def save_snapshot(sheet_url_or_id: str, df: pd.DataFrame, master_worksheet_name:
         ws_master.clear()
         ws_master.update(data_to_upload)
         
-        # 2. Create Snapshot
-        snapshot_name = datetime.now().strftime("%Y-%m-%d_%H%M")
-        try:
-             ws_snapshot = sheet.add_worksheet(title=snapshot_name, rows=len(df)+100, cols=len(df.columns)+5)
-             ws_snapshot.update(data_to_upload)
-        except Exception as e:
-            # Snapshot failure is non-critical, just warn
-            st.warning(f"Snapshot creation failed (might already exist): {e}")
+        # 2. Create Snapshot - DISABLED per user request
+        # snapshot_name = datetime.now().strftime("%Y-%m-%d_%H%M")
+        # try:
+        #      ws_snapshot = sheet.add_worksheet(title=snapshot_name, rows=len(df)+100, cols=len(df.columns)+5)
+        #      ws_snapshot.update(data_to_upload)
+        # except Exception as e:
+        #     # Snapshot failure is non-critical, just warn
+        #     st.warning(f"Snapshot creation failed (might already exist): {e}")
 
-            st.warning(f"Snapshot creation failed (might already exist): {e}")
 
+    
         # Clear cache to ensure next load gets fresh data
         st.cache_data.clear()
         print("DEBUG: Cache cleared after save.")
-
         return True
-        
-        return False
-    
+
     except Exception as e:
         st.error(f"Failed to save data: {e}")
         return False

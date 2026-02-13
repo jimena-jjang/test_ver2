@@ -5,7 +5,7 @@ from gsheet_handler import save_snapshot
 def render_data_ops(df: pd.DataFrame, sheet_url_or_id, worksheet_name):
     # st.header("🛠 데이터 운영 (Data Ops)") # Title handled in app.py
     st.info("""
-    데이터를 직접 수정하고 저장할 수 있습니다. 저장 시 구글 시트에 새로운 스냅샷이 생성됩니다.
+    데이터를 직접 수정하고 저장할 수 있습니다. 저장 시 원본 구글 시트에 내용이 덮어씌워집니다.
     
     :red[**⚠️ 주의: 필터링 여부와 관계없이 전체 데이터가 불러와집니다.**]
     (데이터 유실 방지를 위해, Data Ops에서는 필터가 적용되지 않은 전체 데이터를 수정하게 됩니다.)
@@ -43,7 +43,7 @@ def render_data_ops(df: pd.DataFrame, sheet_url_or_id, worksheet_name):
         with st.spinner("저장 중..."):
             success = save_snapshot(sheet_url_or_id, edited_df, worksheet_name)
             if success:
-                st.success("저장 완료! 새로운 스냅샷이 생성되었습니다.")
+                st.success("저장 완료! 원본 시트가 업데이트되었습니다.")
                 st.rerun()
             else:
                 st.error("저장에 실패했습니다. 설정을 확인해주세요.")

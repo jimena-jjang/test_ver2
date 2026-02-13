@@ -5,6 +5,13 @@ from logic import calculate_workload, predict_start_date, identify_issues, calcu
 import textwrap
 
 def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None):
+    # Top Action Bar
+    col_action, _ = st.columns([0.2, 0.8])
+    with col_action:
+        if st.button("🔄 데이터 새로고침", key="analysis_refresh"):
+            st.cache_data.clear()
+            st.rerun()
+
     # st.header("📊 데이터 분석 리포트") # Title handled in app.py
     
     # 0. Key Issues & Strategic Tasks (Moved to top)

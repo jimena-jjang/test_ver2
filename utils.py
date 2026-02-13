@@ -36,12 +36,19 @@ def get_status_style(status):
         'border': '#888888', 'fill': 'white', 'style': 'solid', 'icon': ''
     }
     
+    
     # Normalization and stripping
     clean_status = unicodedata.normalize('NFC', status).strip()
     
-    return STATUS_CONFIG.get(clean_status, {
-        'border': '#888888', 'fill': 'white', 'style': 'solid', 'icon': ''
-    })
+    if clean_status in STATUS_CONFIG:
+        return STATUS_CONFIG[clean_status]
+        
+    # Dynamic styling for unknown statuses
+    # Use hash to pick a fallback color consistently
+    color = FALLBACK_COLORS[hash(clean_status) % len(FALLBACK_COLORS)]
+    return {
+        'border': color, 'fill': color, 'style': 'solid', 'icon': '', 'text_color': 'white'
+    }
 
 STATUS_COLORS = {k: v['border'] for k, v in STATUS_CONFIG.items()} # Backwards compatibility just in case
 

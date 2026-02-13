@@ -1,3 +1,4 @@
+import streamlit as st
 import pandas as pd
 import unicodedata
 from datetime import datetime
@@ -30,6 +31,7 @@ DEFAULT_STATUS_COLOR = '#888888'
 # -----------------------------------------------------------------------------
 # DATA PROCESSING
 # -----------------------------------------------------------------------------
+@st.cache_data(ttl=600)
 def process_data(df: pd.DataFrame) -> pd.DataFrame:
     """
     Standardizes column names and formats data.
