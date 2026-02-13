@@ -245,13 +245,23 @@ def identify_issues(df: pd.DataFrame) -> pd.DataFrame:
     # We want Status Issue at top.
     
     def get_issue_type_sort(row):
-        is_status_issue = row['Status'] == '이슈'
-        is_strategic_simple = ('전략과제' in str(row.get('Biz_impact', ''))) and (row['Status'] == '단순 인입')
+        # 1. Status Issue
+        status_val = str(row['Status']) if pd.notna(row['Status']) else ''
+        if status_val == '이슈':
+            return 0, status_val # Use Status value
+            
+        # 2. Strategic Task
+        biz_impact = str(row.get('Biz_impact', ''))
+        # Strategic task definition: Status='단순 인입' AND Biz_impact contains '전략과제'
+        # But wait, original logic was Status='단순 인입' AND Biz_impact contains '전략과제'
+        # The user request says: "Strategic Task: Biz_impact와 똑같은 value로 표기"
         
-        if is_status_issue:
-            return 0, 'Status Issue' # High Priority
-        elif is_strategic_simple:
-            return 1, 'Strategic Task'
+        is_strategic = '전략과제' in biz_impact
+        is_simple = status_val == '단순 인입'
+        
+        if is_strategic and is_simple:
+            return 1, biz_impact # Use Biz_impact value
+            
         return 2, 'Other'
 
     # Apply to create sort key and label

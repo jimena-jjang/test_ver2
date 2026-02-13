@@ -7,6 +7,39 @@ import textwrap
 def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None):
     # st.header("📊 데이터 분석 리포트") # Title handled in app.py
     
+    # 0. Key Issues & Strategic Tasks (Moved to top)
+    st.subheader("⚠️ 주요 이슈 및 전략 과제 (Key Issues & Strategic Tasks)")
+    
+    st.info("""
+    **본 테이블은 CEO 검토 및 판단이 필요한 항목만 선별한 요약 리스트입니다.**
+
+    - **이슈**: 현재 상황을 공유드리며, 필요 시 진행 여부 또는 우선순위에 대한 판단을 부탁드립니다.
+    - **전략과제**: 신규로 인입된 전략 과제로, 진행 여부 결정 후 요청 부서에 회신이 필요한 항목입니다.
+
+    ※ 각 과제의 배경과 현재 상태는 **비고/설명** 컬럼을 참고해 주세요.
+    """)
+    # identify_issues is imported at the top.
+    issues = identify_issues(df)
+    
+    if not issues.empty:
+        st.error(f"총 {len(issues)}건의 이슈가 발견되었습니다.")
+        st.dataframe(
+            issues[['Squad', 'Task', 'Status', 'End', 'Issue_Type', 'Comment']], 
+            use_container_width=True,
+            column_config={
+                "Squad": "스쿼드",
+                "Task": "과제명",
+                "Status": "상태",
+                "End": st.column_config.DateColumn("종료일", format="YYYY-MM-DD"),
+                "Issue_Type": "이슈 유형",
+                "Comment": "비고/설명"
+            }
+        )
+    else:
+        st.success("발견된 이슈가 없습니다.")
+
+    st.divider()
+    
     st.subheader("스쿼드별 업무 로드 및 리소스 분석")
     
     # Calculate Utilization Metrics
@@ -201,29 +234,7 @@ def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None):
     else:
         st.info("예측 가능한 스쿼드 데이터가 없습니다.")
 
-    st.divider()
 
-    # 5. Issue Tracking (Moved to bottom)
-    st.subheader("⚠️ 주요 이슈 및 전략 과제 (Key Issues & Strategic Tasks)")
-    # identify_issues is imported at the top.
-    issues = identify_issues(df)
-    
-    if not issues.empty:
-        st.error(f"총 {len(issues)}건의 이슈가 발견되었습니다.")
-        st.dataframe(
-            issues[['Squad', 'Task', 'Status', 'End', 'Issue_Type', 'Comment']], 
-            use_container_width=True,
-            column_config={
-                "Squad": "스쿼드",
-                "Task": "과제명",
-                "Status": "상태",
-                "End": st.column_config.DateColumn("종료일", format="YYYY-MM-DD"),
-                "Issue_Type": "이슈 유형",
-                "Comment": "비고/설명"
-            }
-        )
-    else:
-        st.success("발견된 이슈가 없습니다.")
 
 # Mock for logic that wasn't fully defined in previous step or needs import fix
 # logic.py didn't include start_swap_scenario, so removing import or fixing usage.
