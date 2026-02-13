@@ -10,22 +10,28 @@ from datetime import datetime, timedelta
 # -----------------------------------------------------------------------------
 STATUS_CONFIG = {
     '진행 완료': {
-        'border': '#10B981', 'fill': '#10B981', 'style': 'solid', 'icon': '', 'text_color': 'white' # Green
+        'border': '#10B981', 'fill': '#10B981', 'style': 'solid', 'icon': '✅', 'text_color': '#047857', 'bg_color': '#ECFDF5' # Green
     },
     '진행 중': {
-        'border': '#3B82F6', 'fill': '#3B82F6', 'style': 'solid', 'icon': '', 'text_color': 'white' # Blue
+        'border': '#3B82F6', 'fill': '#3B82F6', 'style': 'solid', 'icon': '🏃', 'text_color': '#1D4ED8', 'bg_color': '#EFF6FF' # Blue
     },
     '진행 예정': {
-        'border': '#8B5CF6', 'fill': '#8B5CF6', 'style': 'solid', 'icon': '', 'text_color': 'white' # Purple
+        'border': '#8B5CF6', 'fill': '#8B5CF6', 'style': 'solid', 'icon': '🗓️', 'text_color': '#6D28D9', 'bg_color': '#F5F3FF' # Purple
     },
     '이슈': {
-        'border': '#EF4444', 'fill': 'rgba(239, 68, 68, 0.7)', 'style': 'dashed', 'icon': '⚠️', 'text_color': 'white' # Red
+        'border': '#EF4444', 'fill': 'rgba(239, 68, 68, 0.7)', 'style': 'dashed', 'icon': '🚨', 'text_color': '#B91C1C', 'bg_color': '#FEF2F2' # Red
+    },
+    '보류': {
+        'border': '#F59E0B', 'fill': '#F59E0B', 'style': 'dashed', 'icon': '⏸️', 'text_color': '#B45309', 'bg_color': '#FFFBEB' # Amber
+    },
+    '미정': {
+        'border': '#9CA3AF', 'fill': '#9CA3AF', 'style': 'dashed', 'icon': '❓', 'text_color': '#4B5563', 'bg_color': '#F3F4F6' # Gray
     },
     '단순 인입': {
-        'border': '#64748B', 'fill': '#64748B', 'style': 'dashed', 'icon': '', 'text_color': 'white' # Slate Gray
+        'border': '#64748B', 'fill': '#64748B', 'style': 'dashed', 'icon': '📥', 'text_color': '#334155', 'bg_color': '#F1F5F9' # Slate
     },
     'DROP': {
-        'border': '#1F2937', 'fill': '#1F2937', 'style': 'dashed', 'icon': '', 'text_color': 'white' # Dark Gray
+        'border': '#1F2937', 'fill': '#1F2937', 'style': 'dashed', 'icon': '⛔', 'text_color': '#111827', 'bg_color': '#F3F4F6' # Dark Gray
     }
 }
 
@@ -188,7 +194,8 @@ def load_and_process_data(file):
         
         col_map = {
             'Squad (대분류)': 'Squad',
-            # '1depth_name (중분류)': 'Group', # Removed mapping
+            '1depth_name (중분류)': 'Project', # User requested Project column
+            '1depth_name': 'Project',
             'Goal (목표)': 'Goal',
             'Subproject_Name (소분류)': 'Task',
             '시작일 (Start)': 'Start',
@@ -199,7 +206,9 @@ def load_and_process_data(file):
             'squad': 'Squad',
             'type': 'Type', 
             'subproject_name': 'Task', 
-            # 'project_name': 'Group', # Removed mapping
+            'project_name': 'Project',
+            'Project_Name': 'Project',
+            'Project': 'Project', # Exact match
             'start_date': 'Start',
             'end_date': 'End',
             'status': 'Status',
@@ -235,7 +244,7 @@ def load_and_process_data(file):
         df['Start'] = pd.to_datetime(df['Start'], errors='coerce')
         df['End'] = pd.to_datetime(df['End'], errors='coerce')
         
-        string_cols = ['Status', 'Type', 'Squad', 'Task', 'Group']
+        string_cols = ['Status', 'Type', 'Squad', 'Task', 'Group', 'Project']
         for col in string_cols:
             if col in df.columns:
                 df[col] = df[col].astype(str).str.strip()

@@ -4,24 +4,32 @@ from gsheet_handler import save_snapshot
 
 def render_data_ops(df: pd.DataFrame, sheet_url_or_id, worksheet_name):
     # st.header("🛠 데이터 운영 (Data Ops)") # Title handled in app.py
-    st.info("""
-    데이터를 직접 수정하고 저장할 수 있습니다. 저장 시 원본 구글 시트에 내용이 덮어씌워집니다.
+    st.markdown("""
+    <div style="background-color: #FFF3CD; border-left: 5px solid #FFC107; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+        <h5 style="color: #856404; margin: 0 0 10px 0;">⚠️ 데이터 직접 수정 주의</h5>
+        <p style="color: #856404; font-size: 0.95em;">
+            데이터를 직접 수정하고 저장할 수 있습니다. <b>저장 시 원본 구글 시트에 내용이 덮어씌워집니다.</b>
+        </p>
+        <p style="color: #D32F2F; font-weight: bold; font-size: 0.95em; margin-top: 10px;">
+            ⚠️ 주의: 필터링 여부와 관계없이 전체 데이터가 불러와집니다.
+        </p>
+        <p style="color: #856404; font-size: 0.9em;">
+            (데이터 유실 방지를 위해, Data Ops에서는 필터가 적용되지 않은 전체 데이터를 수정하게 됩니다.)
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
     
-    :red[**⚠️ 주의: 필터링 여부와 관계없이 전체 데이터가 불러와집니다.**]
-    (데이터 유실 방지를 위해, Data Ops에서는 필터가 적용되지 않은 전체 데이터를 수정하게 됩니다.)
-
-    ---
-    :gray[**※ 데이터 정렬 기준**]
-    
-    :gray[**1. 사용자 지정 정렬** (Custom Sort Column)]
-    :gray[   - 사이드바에서 특정 컬럼을 선택했다면 해당 컬럼이 최우선으로 정렬됩니다.]
-    
-    :gray[**2. 스쿼드** (Squad)]
-    :gray[   - `[MASTER]Squad order.xlsx` 파일(또는 코드 내 고정 순서)에 정의된 순서대로 정렬됩니다.]
-    
-    :gray[**3. 정렬 순서** (Order)] 
-    :gray[   - 원본 데이터에 있는 `No` 또는 `Order` 컬럼의 숫자 순서대로 정렬됩니다.]
-    """)
+    with st.expander("ℹ️ 정렬 기준 도움말", expanded=False):
+        st.markdown("""
+        **1. 사용자 지정 정렬 (Custom Sort Column)**
+        - 사이드바에서 특정 컬럼을 선택했다면 해당 컬럼이 최우선으로 정렬됩니다.
+        
+        **2. 스쿼드 (Squad)**
+        - `[MASTER]Squad order.xlsx` 파일(또는 코드 내 고정 순서)에 정의된 순서대로 정렬됩니다.
+        
+        **3. 정렬 순서 (Order)**
+        - 원본 데이터에 있는 `No` 또는 `Order` 컬럼의 숫자 순서대로 정렬됩니다.
+        """)
     
     
     # Initialize session state for data editor key if not exists

@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 from logic import calculate_workload, predict_start_date, identify_issues, calculate_utilization_metrics
 import textwrap
+import utils
 
 def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None):
     # Top Action Bar
@@ -17,63 +18,74 @@ def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None):
     # 0. Key Issues & Strategic Tasks (Moved to top)
     st.subheader("⚠️ 주요 이슈 및 전략 과제 (Key Issues & Strategic Tasks)")
     
-    st.info("""
-    **본 테이블은 CEO 검토 및 판단이 필요한 항목만 선별한 요약 리스트입니다.**
-
-    - **이슈**: 현재 상황을 공유드리며, 필요 시 진행 여부 또는 우선순위에 대한 판단을 부탁드립니다.
-    - **전략과제**: 신규로 인입된 전략 과제로, 진행 여부 결정 후 요청 부서에 회신이 필요한 항목입니다.
-
-    ※ 각 과제의 배경과 현재 상태는 **비고/설명** 컬럼을 참고해 주세요.
-    """)
+    st.markdown("""
+    <div style="background-color: #FFF3CD; border-left: 5px solid #FFC107; padding: 20px; border-radius: 4px; margin-bottom: 20px;">
+        <h4 style="color: #856404; margin-top: 0;">⚠️ Executive Summary</h4>
+        <p style="color: #856404;">
+            <b>본 테이블은 CEO 검토 및 판단이 필요한 항목만 선별한 요약 리스트입니다.</b>
+        </p>
+        <ul style="color: #856404;">
+            <li><b>이슈</b>: 현재 상황을 공유드리며, 필요 시 진행 여부 또는 우선순위에 대한 판단을 부탁드립니다.</li>
+            <li><b>전략과제</b>: 신규로 인입된 전략 과제로, 진행 여부 결정 후 요청 부서에 회신이 필요한 항목입니다.</li>
+        </ul>
+        <p style="color: #856404; font-size: 0.9em;">
+            ※ 각 과제의 배경과 현재 상태는 <b>비고/설명</b> 컬럼을 참고해 주세요.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
     # identify_issues is imported at the top.
     issues = identify_issues(df)
     
     if not issues.empty:
+        # [User Request] Add icons to Status column
+        issues['Status'] = issues['Status'].apply(lambda x: f"{utils.get_status_style(x).get('icon', '')} {x}")
+
         st.error(f"총 {len(issues)}건의 이슈가 발견되었습니다.")
+        # Prepare columns for display
+        # Ensure Project column exists (it might be missing if source data didn't have it)
+        display_cols = ['Squad', 'Task', 'Status', 'Comment']
+        if 'Project' in issues.columns:
+            display_cols.insert(1, 'Project') # Insert Project after Squad
+            
         st.dataframe(
-            issues[['Squad', 'Task', 'Status', 'End', 'Issue_Type', 'Comment']], 
+            issues[display_cols], 
             use_container_width=True,
             column_config={
                 "Squad": "스쿼드",
+                "Project": "Project",
                 "Task": "과제명",
                 "Status": "상태",
-                "End": st.column_config.DateColumn("종료일", format="YYYY-MM-DD"),
-                "Issue_Type": "이슈 유형",
-                "Comment": "비고/설명"
-            }
+                "Comment": "이슈 설명"
+            },
+            hide_index=True
         )
     else:
         st.success("발견된 이슈가 없습니다.")
 
     st.divider()
     
-    st.subheader("스쿼드별 업무 로드 및 리소스 분석")
+    st.subheader("📈 스쿼드별 업무 로드 및 리소스 분석")
     
     # Calculate Utilization Metrics
     metrics_df = calculate_utilization_metrics(df, df_resource)
     
     if not metrics_df.empty:
         # 1. Formula Explanation (Detailed Box)
-        explanation = """
-        **부하율 (%) = (진행중 과제수 ÷ 수행 능력) × 100**
-        
-        각 항목의 상세 의미는 아래와 같습니다:
-        
-        - **진행중 과제수 (Active Tasks)**
-            오늘 날짜를 기준으로 진행 중인 과제의 수입니다. 
-            *(시작일 ≤ 오늘 ≤ 종료일)* 또는 *상태가 '진행 중'*인 과제를 카운트합니다.
-        
-        - **수행 능력 (Capacity)**
-            스쿼드가 동시에 처리할 수 있는 적정 과제 수입니다.
-            계산식: `보유 인원 (Headcount)` ÷ `과제당 필요 인원 (Min Personnel)`
-            예: 9명의 인원이 있고, 과제당 5명이 필요하다면 → 수행 능력은 **1.8개**가 됩니다.
-            
-        **[요약]**
-        즉, **"스쿼드가 현재 처리 가능한 능력(Capacity) 대비 실제로 얼마나 많은 과제(Active Tasks)를 맡고 있는지"**를 백분율로 나타낸 값입니다.
-        - **100% 초과**: 수행 능력보다 많은 일이 몰려있음 (과부하)
-        - **100% 미만**: 수행 능력 대비 여유가 있음
-        """
-        st.info(explanation)
+        st.markdown(f"""
+        <div class="explanation-card">
+            <div class="explanation-title">📊 부하율 (Load Rate) 계산 방식</div>
+            <p><b>부하율 (%) = (진행중 과제수 ÷ 수행 능력) × 100</b></p>
+            <ul>
+                <li><b>진행중 과제수 (Active Tasks)</b>: 오늘 기준 진행 중인 과제 (시작일 ≤ 오늘 ≤ 종료일 OR 상태='진행 중')</li>
+                <li><b>수행 능력 (Capacity)</b>: 스쿼드가 동시에 처리 가능한 적정 과제 수 (보유 인원 ÷ 과제당 필요 인원)</li>
+            </ul>
+             <p><b>[해석 가이드]</b></p>
+            <ul>
+                <li><b>100% 초과</b>: 수행 능력보다 많은 일이 몰려있음 (과부하) 🔴</li>
+                <li><b>100% 미만</b>: 수행 능력 대비 여유가 있음 🟢</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
         
         # 2. Key Metrics Visualization (Bar Chart with Load Rate color)
         def get_color(rate):

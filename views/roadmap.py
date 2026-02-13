@@ -387,6 +387,12 @@ def create_professional_gantt(df, group_col='Squad'):
             # task_text += " (진행중)" # Removed as per user request
         
         if show_bar:
+            # Get style config for this status
+            style = utils.STATUS_CONFIG.get(status, {})
+            bar_color = style.get('bg_color', '#FFFFFF')
+            border_color = style.get('border', '#000000')
+            text_color = style.get('text_color', '#000000')
+            
             # 1. Main White Bar (Box)
             fig.add_trace(go.Bar(
                 y=[idx],
@@ -394,8 +400,9 @@ def create_professional_gantt(df, group_col='Squad'):
                 base=[bar_base],
                 orientation='h',
                 marker=dict(
-                    color='white', 
-                    line=dict(width=2, color='black') # Thick black border
+                    color=bar_color, 
+                    line=dict(width=2, color=border_color), # Colored border
+                    cornerradius=10 # Rounded corners (requires Plotly 5.23+)
                 ),
                 width=0.8, # Thicker bar for card look
                 opacity=bar_opacity,
@@ -403,7 +410,7 @@ def create_professional_gantt(df, group_col='Squad'):
                 text=f"<b>{task_text}</b>",
                 textposition='inside', 
                 insidetextanchor='start', # Left align task name
-                insidetextfont=dict(size=12, color='black', family="Arial"), # Black text
+                insidetextfont=dict(size=13, color=text_color, family="Pretendard, Apple SD Gothic Neo, Arial"), # Colored text
                 textangle=0, # Force horizontal
                 constraintext='none', # Allow overflow, don't rotate/shrink weirdly
                 hovertemplate=(
@@ -537,7 +544,7 @@ def render_roadmap(df_original):
     # Sidebar Filters
     with st.sidebar:
 
-        st.header("📂 정렬 기준")
+        st.markdown('<div class="sidebar-section-header">📂 정렬 기준</div>', unsafe_allow_html=True)
         
         # 1. Group By (Dynamic based on Excel columns)
         # Exclude system columns that shouldn't be grouped by
@@ -559,9 +566,9 @@ def render_roadmap(df_original):
         
         selected_group_col = st.selectbox("정렬 기준 선택", group_options, index=default_index, label_visibility="collapsed")
         
-        st.divider()
+        # Removed divider per user request
         
-        st.header("🔍 검색 및 필터")
+        st.markdown('<div class="sidebar-section-header">🔍 검색 및 필터</div>', unsafe_allow_html=True)
 
         # Search
         search_query = st.text_input("과제명 검색", "")
@@ -675,45 +682,52 @@ def render_roadmap(df_original):
     )
     active_today_count = len(df_chart[active_mask])
     
+    # Dynamic Metrics Logic
+    # 1. Get all unique statuses from the original data to ensure the list is complete and stable
+    all_dataset_statuses = sorted(df_original['Status'].dropna().unique().tolist())
+    
+    # 2. Sort Logic (Same as Legend)
+    sort_priority = ['진행 중', '진행 예정', '진행 완료', '미정', '이슈', '보류', 'DROP', '단순 인입']
+    
+    def get_status_rank_metric(s):
+        norm_s = unicodedata.normalize('NFC', s).strip()
+        if norm_s in sort_priority:
+            return sort_priority.index(norm_s)
+        return 999
+        
+    sorted_statuses = sorted(all_dataset_statuses, key=lambda x: (get_status_rank_metric(x), x))
+    
+    # 3. Build Metrics List
+    # Structure: (Label, Value, TextColor, BgColor, Icon, BorderColor)
     metrics_order = [
-        ("표시 중인 과제", total_chart_count, "#333333"),
-        ("🔥 오늘 진행중", active_today_count, "#FF4B4B"),
-        ("진행 완료", status_counts.get('진행 완료', 0), utils.STATUS_CONFIG['진행 완료']['border']),
-        ("진행 중", status_counts.get('진행 중', 0), utils.STATUS_CONFIG['진행 중']['border']),
-        ("진행 예정", status_counts.get('진행 예정', 0), utils.STATUS_CONFIG['진행 예정']['border']),
-        ("이슈", status_counts.get('이슈', 0), utils.STATUS_CONFIG['이슈']['border']),
-        ("단순 인입", status_counts.get('단순 인입', 0), utils.STATUS_CONFIG['단순 인입']['border']),
-        ("DROP", status_counts.get('DROP', 0), utils.STATUS_CONFIG['DROP']['border']),
+         ("표시 중인 과제", total_chart_count, "#333333", "#FFFFFF", "📂", "#E0E0E0"),
+         ("오늘 진행중", active_today_count, "#DC2626", "#FEF2F2", "🔥", "#FECACA")
     ]
     
-    st.markdown('''
-    <style>
-    .metric-box {
-        background-color: #f9f9f9;
-        border: 1px solid #e0e0e0;
-        border-radius: 8px;
-        padding: 10px;
-        text-align: center;
-    }
-    .metric-label {
-        font-size: 12px;
-        color: #666;
-        margin-bottom: 4px;
-    }
-    .metric-value {
-        font-size: 24px;
-        font-weight: bold;
-    }
-    </style>
-    ''', unsafe_allow_html=True)
+    for status in sorted_statuses:
+        count = status_counts.get(status, 0)
+        style = utils.get_status_style(status)
+        
+        text_color = style.get('text_color', '#333333')
+        bg_color = style.get('bg_color', '#FFFFFF')
+        icon = style.get('icon', '')
+        border_color = style.get('border', '#E0E0E0')
+        
+        metrics_order.append((status, count, text_color, bg_color, icon, border_color))
     
+    # Render with Columns (Wrapping handled if too many)
+    # If too many columns, st.columns might get cramped. For now, we trust streamlit.
     m_cols = st.columns(len(metrics_order))
-    for i, (label, value, color) in enumerate(metrics_order):
+    for i, (label, value, text_color, bg_color, icon, border_color) in enumerate(metrics_order):
         with m_cols[i]:
             st.markdown(f"""
-            <div class="metric-box">
-                <div class="metric-label">{label}</div>
-                <div class="metric-value" style="color: {color};">{value}</div>
+            <div class="metric-box" style="background-color: {bg_color}; border: 1px solid {border_color};">
+                <div class="metric-label" style="color: {text_color}; opacity: 0.9;">
+                    {icon} {label}
+                </div>
+                <div class="metric-value" style="color: {text_color};">
+                    {value}
+                </div>
             </div>
             """, unsafe_allow_html=True)
             

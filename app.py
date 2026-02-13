@@ -6,28 +6,72 @@ from gsheet_handler import load_data
 from squad_manager import sort_squads
 import utils
 
+
 # -----------------------------------------------------------------------------
-# PAGE CONFIG
+# PAGE CONFIG & STYLING
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="Product Management System",
+    page_title="Product Decision Board",
     page_icon="🗓️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# -----------------------------------------------------------------------------
-# SIDEBAR
-# -----------------------------------------------------------------------------
-st.sidebar.title("🗓️ PMS (Ver.2)")
+# Load Custom CSS
+def load_css(file_name):
+    with open(file_name) as f:
+        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
 
-# Navigation
-page = st.sidebar.radio("Navigation", ["Roadmap View", "Analysis Report", "Data Ops"])
-
-st.sidebar.divider()
+try:
+    load_css("assets/styles.css")
+except FileNotFoundError:
+    st.error("CSS file not found. Please ensure 'assets/styles.css' exists.")
 
 # -----------------------------------------------------------------------------
-# DATA CONNECTION SETTINGS
+# SIDEBAR NAVIGATION & SETTINGS
+# -----------------------------------------------------------------------------
+with st.sidebar:
+    st.markdown('<div class="sidebar-main-title">🗓️ Product Decision Board</div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div class="sidebar-desc-box">
+        <div class="sidebar-desc-text">
+            Jira 이전 단계의 아이디어·이슈·전략과제를 통합 관리하며, 
+            CEO/CTO가 주요 안건을 빠르게 인지하고 판단할 수 있도록 구성된 오버뷰 보드
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    # Removed divider per user request
+    
+    # Navigation
+    st.markdown('<div class="sidebar-section-header">🧭 메뉴</div>', unsafe_allow_html=True)
+    
+    PAGES = {
+        "로드맵": {
+            "icon": "🗺️",
+            "description": "전체 과제의 진행 현황을 타임라인 기반으로 한눈에 확인할 수 있는 뷰입니다."
+        },
+        "리소스 및 이슈": {
+            "icon": "📊",
+            "description": "리소스 현황과 주요 이슈를 요약해 의사결정 포인트를 빠르게 확인합니다."
+        },
+        "데이터 수정": {
+            "icon": "🛠", 
+            "description": "과제 추가 및 수정이 가능한 데이터 관리 영역입니다. (구글 시트 원본에 직접 반영됩니다)"
+        }
+    }
+    
+    # Custom Format for Sidebar Menu
+    page = st.radio(
+        " ", 
+        list(PAGES.keys()), 
+        format_func=lambda x: f"{PAGES[x]['icon']}  {x}",
+        label_visibility="collapsed"
+    )
+    
+    st.divider()
+
+# -----------------------------------------------------------------------------
+# DATA CONNECTION SETTINGS (Sidebar)
 # -----------------------------------------------------------------------------
 with st.sidebar.expander("🔌 Connection Settings", expanded=False):
     # --- Roadmap Data Settings ---
@@ -107,8 +151,17 @@ elif res_source == "Google Sheet":
 # MAIN CONTENT & SIDEBAR LOGIC
 # -----------------------------------------------------------------------------
 
-if page == "Roadmap View":
-    st.title("🗺️ Roadmap View")
+# Display Dynamic Description at Top of Main Area
+# (Previous separate block removed in favor of integrated header below)
+
+if page == "로드맵":
+    st.markdown(f"""
+    <div class="view-header">
+        <div class="view-title">🗺️ 로드맵</div>
+        <div class="view-desc">{PAGES['로드맵']['description']}</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
     # Roadmap has its own sidebar filters, so we bypass the global filter block
     # and pass the raw processed DF (df) instead of final_df
     if df is not None:
@@ -148,13 +201,23 @@ else:
         
         st.sidebar.info(f"Total Tasks: {len(final_df)}")
         
-        if page == "Analysis Report":
-            st.title("📊 Analysis Report")
+        if page == "리소스 및 이슈":
+            st.markdown(f"""
+            <div class="view-header">
+                <div class="view-title">📊 리소스 및 이슈</div>
+                <div class="view-desc">{PAGES['리소스 및 이슈']['description']}</div>
+            </div>
+            """, unsafe_allow_html=True)
             # if resource_file: logic removed as it is handled above.
             analysis.render_analysis_report(final_df, df_resource)
 
-        elif page == "Data Ops":
-            st.title("🛠 Data Editor")
+        elif page == "데이터 수정":
+            st.markdown(f"""
+            <div class="view-header">
+                <div class="view-title">🛠 데이터 수정</div>
+                <div class="view-desc">{PAGES['데이터 수정']['description']}</div>
+            </div>
+            """, unsafe_allow_html=True)
             # For Data Ops, we show the RAW data (raw_df) to prevent data loss and show original columns/order.
             if raw_df is not None:
                 data_ops.render_data_ops(raw_df, sheet_id, worksheet_name)

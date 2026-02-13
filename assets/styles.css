@@ -1,0 +1,287 @@
+/* Global Font Import (Pretendard via CDN for Korean support) */
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+
+/* Root Variables */
+:root {
+    --primary-color: #4A90E2;
+    --secondary-color: #50E3C2;
+    --background-color: #FFFFFF;
+    /* Main Content White */
+    --text-color: #333333;
+    --sidebar-bg: #F8F9FA;
+    /* Sidebar Grey */
+    --card-bg: #FFFFFF;
+    --border-color: #E0E0E0;
+    --font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', sans-serif;
+}
+
+/* Global Styles */
+html,
+body,
+[class*="css"] {
+    font-family: var(--font-family) !important;
+    color: var(--text-color);
+}
+
+/* Main Background */
+.stApp {
+    background-color: var(--background-color);
+}
+
+/* Sidebar Customization */
+section[data-testid="stSidebar"] {
+    background-color: var(--sidebar-bg);
+    border-right: 1px solid var(--border-color);
+}
+
+/* Titles and Headers */
+h1,
+h2,
+h3 {
+    font-weight: 700 !important;
+    letter-spacing: -0.5px;
+}
+
+/* Custom Alert Boxes (Info, Success, Warning, Error Override) */
+div.stAlert {
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(49, 51, 63, 0.1);
+    /* Subtle border for visibility */
+}
+
+/* Custom Metric Box Class (Used in Roadmap View) */
+/* Custom Metric Box Class (Used in Roadmap View) */
+.metric-box {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    /* Rounder corners */
+    padding: 20px 16px;
+    /* Slightly more vertical padding */
+    text-align: center;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    /* Softer shadow */
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    height: 100%;
+    /* Ensure uniform height if in columns */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.metric-box:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+}
+
+.metric-label {
+    font-size: 14px;
+    color: #555;
+    margin-bottom: 8px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+}
+
+.metric-value {
+    font-size: 32px;
+    /* Larger number */
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -1px;
+}
+
+/* Card Style for Explanation Boxes */
+.explanation-card {
+    background-color: #E3F2FD;
+    /* Light Blue */
+    border-left: 5px solid #2196F3;
+    padding: 20px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+}
+
+.explanation-title {
+    font-weight: bold;
+    font-size: 1.1em;
+    margin-bottom: 10px;
+    color: #0D47A1;
+}
+
+/* Streamlit Button Styling */
+button[kind="primary"] {
+    background-color: var(--primary-color) !important;
+    border: none;
+    transition: background-color 0.3s;
+}
+
+button[kind="primary"]:hover {
+    background-color: #357ABD !important;
+}
+
+/* DataFrame Table Header Styling */
+th {
+    background-color: #F1F3F4 !important;
+    color: #333 !important;
+    font-weight: 600 !important;
+}
+
+/* Sidebar Description Box */
+.sidebar-desc-box {
+    background-color: #FFFFFF;
+    /* White box on grey sidebar */
+    border: 1px solid #E0E0E0;
+    /* Full border */
+    border-left: 4px solid #4A90E2;
+    /* Accent */
+    padding: 16px;
+    border-radius: 8px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.sidebar-desc-text {
+    font-size: 14px;
+    color: #444;
+    line-height: 1.6;
+    font-weight: 500;
+}
+
+/* Sidebar Menu (Vertical List Style) */
+section[data-testid="stSidebar"] div[data-testid="stRadio"]>div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+section[data-testid="stSidebar"] div[data-testid="stRadio"] label {
+    background-color: transparent;
+    border: none;
+    border-radius: 4px;
+    padding: 10px 12px;
+    margin: 0;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    color: #444;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+section[data-testid="stSidebar"] div[data-testid="stRadio"] label:hover {
+    background-color: #FFFFFF;
+    /* White hover on grey sidebar */
+    color: #000;
+}
+
+/* Selected Item Styling */
+section[data-testid="stSidebar"] div[data-testid="stRadio"] label:has(input:checked) {
+    background-color: #E8F0FE;
+    color: #1967D2;
+    font-weight: 600;
+    border-left: 3px solid #1967D2;
+    /* Left Accent like reference */
+}
+
+/* Hide default radio circles */
+section[data-testid="stSidebar"] div[data-testid="stRadio"] input[type="radio"] {
+    display: none;
+}
+
+/* Navigation Description Box (Top of Main Page) */
+.nav-description-box {
+    background-color: #FFFFFF;
+    border: 1px solid #E0E0E0;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.nav-desc-title {
+    font-weight: 700;
+    font-size: 1.1em;
+    color: #1967D2;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.nav-desc-text {
+    font-size: 0.95em;
+    color: #555;
+    line-height: 1.5;
+}
+
+
+/* View Header (Title + Description Side-by-Side) */
+.view-header {
+    display: flex;
+    align-items: baseline;
+    /* Align text on the baseline */
+    gap: 16px;
+    margin-bottom: 24px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #F0F0F0;
+}
+
+.view-title {
+    font-size: 32px;
+    font-weight: 800;
+    color: #111;
+    white-space: nowrap;
+    /* Prevent title breaking */
+}
+
+.view-desc {
+    font-size: 15px;
+    color: #666;
+    font-weight: 400;
+    line-height: 1.4;
+}
+
+/* Standardized Sidebar Header */
+.sidebar-section-header {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #333;
+    margin-top: 20px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Sidebar Main Title */
+.sidebar-main-title {
+    font-size: 1.5rem;
+    /* Larger font size */
+    font-weight: 800;
+    color: #111;
+    margin-top: 10px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Sidebar Radio Button (Navigation) Styling */
+section[data-testid="stSidebar"] .stRadio div[role="radiogroup"]>label {
+    padding: 12px 16px !important;
+    /* Larger click area */
+    border-radius: 8px !important;
+    margin-bottom: 6px !important;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    border: 1px solid transparent;
+}
+
+section[data-testid="stSidebar"] .stRadio div[role="radiogroup"]>label:hover {
+    background-color: #FFFFFF !important;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
