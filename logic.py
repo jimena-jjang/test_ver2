@@ -276,7 +276,7 @@ def identify_issues(df: pd.DataFrame) -> pd.DataFrame:
     
     return issues
 
-def calculate_utilization_metrics(df_tasks: pd.DataFrame, df_resource: pd.DataFrame = None) -> pd.DataFrame:
+def calculate_utilization_metrics(df_tasks: pd.DataFrame, df_resource: pd.DataFrame = None, df_weights: pd.DataFrame = None) -> pd.DataFrame:
     """
     Calculates utilization metrics per squad combining Task data and Resource data.
     """
@@ -289,34 +289,62 @@ def calculate_utilization_metrics(df_tasks: pd.DataFrame, df_resource: pd.DataFr
         
         # Helper for active count
         def get_active_count(group):
-            mask = (group['Start'] <= today_date) & ((group['End'] >= today_date) | pd.isna(group['End']))
+            mask = (group['Status'] == '진행 중')
             return mask.sum()
 
         squad_summary = df_tasks.groupby('Squad').agg(
             Total_Tasks=('Task', 'count'),
-            Active_Tasks=('Start', lambda x: get_active_count(df_tasks.loc[x.index])) 
+            Active_Tasks=('Status', lambda x: get_active_count(df_tasks.loc[x.index])) 
             # Note: lambda x involves index lookup which is robust. 
             # Simplified: filter active first then group count might be faster but this preserves all squads.
         ).reset_index()
 
         # Re-calc Active Tasks simpler way to avoid lambda complexity issues
-        # Active if: (Date in range) OR (Status is '진행 중')
-        active_mask = (
-            ((df_tasks['Start'] <= today_date) & ((df_tasks['End'] >= today_date) | pd.isna(df_tasks['End']))) |
-            (df_tasks['Status'] == '진행 중')
-        )
+        # Active if: Status is '진행 중'
+        active_mask = (df_tasks['Status'] == '진행 중')
         active_counts = df_tasks[active_mask].groupby('Squad').size().reset_index(name='Active_Tasks_Calc')
         
         # Merge to ensure 0 for no active tasks
         squad_summary = pd.merge(squad_summary, active_counts, on='Squad', how='left')
         squad_summary['Active_Tasks'] = squad_summary['Active_Tasks_Calc'].fillna(0)
         squad_summary = squad_summary.drop(columns=['Active_Tasks_Calc'])
+        
+        # Calculate Active_Tasks_Score using weights
+        active_tasks_df = df_tasks[active_mask].copy()
+        
+        weight_map = {}
+        if df_weights is not None and not df_weights.empty:
+            type_col = next((c for c in df_weights.columns if str(c).strip().lower() == 'type'), None)
+            weight_col = next((c for c in df_weights.columns if str(c).strip().lower() == 'weight'), None)
+            if type_col and weight_col:
+                for _, row in df_weights.iterrows():
+                    t = str(row[type_col]).strip()
+                    w = pd.to_numeric(row[weight_col], errors='coerce')
+                    if pd.notna(w) and t:
+                        weight_map[t] = float(w)
+                        
+        def get_task_weight(type_val):
+            if pd.isna(type_val) or str(type_val).strip() == "":
+                return 1.0 # Default weight is 1.0
+            type_str = str(type_val).strip()
+            return weight_map.get(type_str, 1.0)
+            
+        if 'Type' in active_tasks_df.columns:
+            active_tasks_df['Task_Weight'] = active_tasks_df['Type'].apply(get_task_weight)
+        else:
+            active_tasks_df['Task_Weight'] = 1.0
+            
+        active_scores = active_tasks_df.groupby('Squad')['Task_Weight'].sum().reset_index(name='Active_Tasks_Score')
+        
+        squad_summary = pd.merge(squad_summary, active_scores, on='Squad', how='left')
+        squad_summary['Active_Tasks_Score'] = squad_summary['Active_Tasks_Score'].fillna(0)
 
     if df_resource is None or df_resource.empty:
         # Return basic stats if no resource data, but ensure columns exist for UI consistency
         squad_summary['Headcount'] = 0
         squad_summary['Min_Personnel'] = 0
         squad_summary['Capacity'] = 0.0
+        squad_summary['Realistic_Capacity'] = 0.0
         squad_summary['Load_Rate'] = 0.0
         squad_summary['Balance'] = 0.0
         return squad_summary
@@ -333,21 +361,25 @@ def calculate_utilization_metrics(df_tasks: pd.DataFrame, df_resource: pd.DataFr
     def calc_row(row):
         headcount = row['Headcount']
         min_p = row['Min_Personnel'] if row['Min_Personnel'] > 0 else 1.0
-        active = row['Active_Tasks']
+        active_count = row['Active_Tasks']
+        active_score = row.get('Active_Tasks_Score', active_count)
         
         # Capacity (How many tasks can be handled)
         capacity = headcount / min_p
         
-        # Load Rate
-        load_rate = active / capacity if capacity > 0 else 0
+        # Realistic Capacity (80% utilization)
+        realistic_capacity = capacity * 0.8
+        
+        # Load Rate (Based on Score and Realistic Capacity)
+        load_rate = active_score / realistic_capacity if realistic_capacity > 0 else 0
         
         # Balance (Headcount - Required)
-        required = active * min_p
+        required = active_score * min_p
         balance = headcount - required
         
-        return pd.Series([capacity, load_rate, balance])
+        return pd.Series([capacity, realistic_capacity, load_rate, balance])
 
-    merged[['Capacity', 'Load_Rate', 'Balance']] = merged.apply(calc_row, axis=1)
+    merged[['Capacity', 'Realistic_Capacity', 'Load_Rate', 'Balance']] = merged.apply(calc_row, axis=1)
     
     # [User Request] Filter out '미정' and '공통' squads
     merged = merged[~merged['Squad'].isin(['미정', '공통'])]

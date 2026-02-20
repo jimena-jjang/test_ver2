@@ -46,22 +46,23 @@ def _get_worksheet(sheet, worksheet_name):
     Helper to find a worksheet by name, index, or GID.
     """
     try:
+        # First, check if it matches a GID exactly (as string or int)
+        target_gid_str = str(worksheet_name)
+        for w in sheet.worksheets():
+            if str(w.id) == target_gid_str:
+                return w
+                
+        # If not a GID, try treating it as an index if it's an int
         if isinstance(worksheet_name, int):
-            return sheet.get_worksheet(worksheet_name)
+            try:
+                return sheet.get_worksheet(worksheet_name)
+            except Exception:
+                pass
         
-        # Try finding by name first
+        # Finally, try finding by name
         try:
-            return sheet.worksheet(worksheet_name)
+            return sheet.worksheet(str(worksheet_name))
         except gspread.WorksheetNotFound:
-            pass
-            
-        # Try finding by GID (if it's a numeric string)
-        try:
-            target_gid = int(worksheet_name)
-            ws = next((w for w in sheet.worksheets() if w.id == target_gid), None)
-            if ws:
-                return ws
-        except ValueError:
             pass
             
         st.error(f"❌ Worksheet '{worksheet_name}' not found.")

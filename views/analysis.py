@@ -5,7 +5,7 @@ from logic import calculate_workload, predict_start_date, identify_issues, calcu
 import textwrap
 import utils
 
-def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None):
+def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None, df_weights: pd.DataFrame = None):
     # Top Action Bar
     col_action, _ = st.columns([0.2, 0.8])
     with col_action:
@@ -67,17 +67,17 @@ def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None):
     st.subheader("📈 스쿼드별 업무 로드 및 리소스 분석")
     
     # Calculate Utilization Metrics
-    metrics_df = calculate_utilization_metrics(df, df_resource)
+    metrics_df = calculate_utilization_metrics(df, df_resource, df_weights)
     
     if not metrics_df.empty:
         # 1. Formula Explanation (Detailed Box)
         st.markdown(f"""
         <div class="explanation-card">
             <div class="explanation-title">📊 부하율 (Load Rate) 계산 방식</div>
-            <p><b>부하율 (%) = (진행중 과제수 ÷ 수행 능력) × 100</b></p>
+            <p><b>부하율 (%) = (진행중 과제 점수 합산 ÷ 현실적 수행 능력) × 100</b></p>
             <ul>
-                <li><b>진행중 과제수 (Active Tasks)</b>: 오늘 기준 진행 중인 과제 (시작일 ≤ 오늘 ≤ 종료일 OR 상태='진행 중')</li>
-                <li><b>수행 능력 (Capacity)</b>: 스쿼드가 동시에 처리 가능한 적정 과제 수 (보유 인원 ÷ 과제당 필요 인원)</li>
+                <li><b>진행중 과제 점수 합산 (Active Task Score)</b>: 오늘 기준 진행 중인 과제(시작일 ≤ 오늘 ≤ 종료일 OR 상태='진행 중')들의 Type별 Weight 총합</li>
+                <li><b>현실적 수행 능력 (Realistic Capacity)</b>: 기초 수행 능력(보유 인원/필요 인원) × 가동률(80%)</li>
             </ul>
              <p><b>[해석 가이드]</b></p>
             <ul>
@@ -111,12 +111,12 @@ def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None):
             hovertemplate=(
                 "<b>%{x}</b><br>" +
                 "Load Rate: %{y:.0%}<br>" +
-                "Active Tasks: %{customdata[0]}<br>" +
-                "Capacity: %{customdata[1]:.1f}<br>" +
+                "Active Task Score: %{customdata[0]:.1f}<br>" +
+                "Realistic Capacity: %{customdata[1]:.1f}<br>" +
                 "Headcount: %{customdata[2]}<br>" +
                 "Min Personnel: %{customdata[3]}<extra></extra>"
             ),
-            customdata=metrics_df[['Active_Tasks', 'Capacity', 'Headcount', 'Min_Personnel']]
+            customdata=metrics_df[['Active_Tasks_Score', 'Realistic_Capacity', 'Headcount', 'Min_Personnel']]
         )
         fig.add_hline(y=1.0, line_dash="dash", line_color="gray", annotation_text="100% Capacity")
         fig.update_layout(yaxis_tickformat=".0%", height=400)
@@ -127,8 +127,22 @@ def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None):
         st.subheader("📋 상세 데이터")
         
         # Select columns for display
-        display_cols = ['Squad', 'Total_Tasks', 'Active_Tasks', 'Headcount', 'Min_Personnel', 'Capacity']
+        display_cols = ['Squad', 'Total_Tasks', 'Active_Tasks_Score', 'Headcount', 'Min_Personnel', 'Realistic_Capacity']
         
+        # Create tooltip for Active Tasks Score
+        score_help_text = "오늘 날짜 기준 진행 중인 과제들의 Type별 가중치 합산 점수\n\n[Type별 점수 기준]"
+        if df_weights is not None and not df_weights.empty:
+            type_col = next((c for c in df_weights.columns if str(c).strip().lower() == 'type'), None)
+            weight_col = next((c for c in df_weights.columns if str(c).strip().lower() == 'weight'), None)
+            if type_col and weight_col:
+                for _, row in df_weights.iterrows():
+                    t = str(row[type_col]).strip()
+                    w = str(row[weight_col]).strip()
+                    if t and w and t != 'nan' and w != 'nan':
+                        score_help_text += f"\n• {t}: {w}점"
+        else:
+            score_help_text += "\n(데이터 없음)"
+            
         # Create 2 columns for Master-Detail view
         col1, col2 = st.columns([1.2, 1])
         
@@ -144,9 +158,10 @@ def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None):
                         "총 과제수", 
                         help="로드된 Roadmap 데이터 기준 전체 과제 개수"
                     ),
-                    "Active_Tasks": st.column_config.NumberColumn(
-                        "진행중 과제수", 
-                        help="오늘 날짜 기준 진행 중인 과제 수 (기간 내 또는 상태='진행 중')"
+                    "Active_Tasks_Score": st.column_config.NumberColumn(
+                        "진행중 과제 점수", 
+                        format="%.1f점",
+                        help=score_help_text
                     ),
                     "Headcount": st.column_config.NumberColumn(
                         "보유 인원", 
@@ -154,12 +169,12 @@ def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None):
                     ),
                     "Min_Personnel": st.column_config.NumberColumn(
                         "필요 인원/Task", 
-                        help="리소스 데이터(파일/시트)의 'Min_Personnel' 기준. 과제 1개를 수행하는 데 필요한 최소 투입 인원 (기본값: 1명)"
+                        help="리소스 데이터(파일/시트)의 'Min_Personnel' 기준. 과제 1개를 수행하는 데 필요한 최소 투입 인원"
                     ),
-                    "Capacity": st.column_config.NumberColumn(
-                        "수행 능력", 
-                        format="%.1f개", 
-                        help="동시에 처리 가능한 적정 과제 수 (보유 인원 ÷ 필요 인원)"
+                    "Realistic_Capacity": st.column_config.NumberColumn(
+                        "현실적 수행 능력", 
+                        format="%.1f점", 
+                        help="동시에 처리 가능한 기초 수행 능력에 80% 가동률을 적용한 현실적 적정 과제 점수치"
                     )
                 },
                 hide_index=True,
@@ -176,16 +191,9 @@ def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None):
                 st.markdown(f"###### 📌 {selected_squad} - 진행중 과제 목록")
                 
                 # Filter Active Tasks for selected squad
-                today_date = pd.Timestamp.now()
-                # Active Logic: (Date in range) OR (Status == '진행 중')
-                # AND Squad == selected_squad
-                
                 task_mask = (
                     (df['Squad'] == selected_squad) &
-                    (
-                        ((df['Start'] <= today_date) & ((df['End'] >= today_date) | pd.isna(df['End']))) |
-                        (df['Status'] == '진행 중')
-                    )
+                    (df['Status'] == '진행 중')
                 )
                 
                 active_tasks_df = df[task_mask].copy()

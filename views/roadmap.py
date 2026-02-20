@@ -416,6 +416,7 @@ def create_professional_gantt(df, group_col='Squad'):
                 hovertemplate=(
                     f"<span style='font-size:14px; font-weight:bold;'>{row['Task']}</span><br><br>"
                     f"<b>Squad:</b> {row['Squad']}<br>"
+                    f"<b>Type:</b> {row.get('Type', '')}<br>"
                     f"<b>Status:</b> {status}<br>"
                     f"<b>Period:</b> {start_date.strftime('%Y-%m-%d') if pd.notna(start_date) else 'Unknown'} ~ "
                     f"{end_date.strftime('%Y-%m-%d') if pd.notna(end_date) else 'Ongoing'}<br>"

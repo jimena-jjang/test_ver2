@@ -145,7 +145,12 @@ elif res_source == "Google Sheet":
         except Exception as e:
             st.sidebar.error(f"Error: {e}")
 
-
+# 3. Load Weight Data
+df_weights = None
+try:
+    df_weights = load_data("1XwHp_Lm7FQEmZzib8qJ1C1Q--ogCTKPXcHYhMlkE-Ts", "520843420")
+except Exception as e:
+    st.sidebar.error(f"Error loading Weight data: {e}")
 
 # -----------------------------------------------------------------------------
 # MAIN CONTENT & SIDEBAR LOGIC
@@ -209,7 +214,7 @@ else:
             </div>
             """, unsafe_allow_html=True)
             # if resource_file: logic removed as it is handled above.
-            analysis.render_analysis_report(final_df, df_resource)
+            analysis.render_analysis_report(final_df, df_resource, df_weights)
 
         elif page == "데이터 수정":
             st.markdown(f"""
