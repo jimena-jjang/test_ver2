@@ -3,16 +3,24 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from logic import calculate_workload, predict_start_date, identify_issues, calculate_utilization_metrics
+from gsheet_handler import save_snapshot
 import textwrap
 import utils
+from datetime import datetime
 
-def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None, df_weights: pd.DataFrame = None):
+def render_analysis_report(df: pd.DataFrame, raw_df: pd.DataFrame, sheet_id: str, worksheet_name: str, df_resource: pd.DataFrame = None, df_weights: pd.DataFrame = None):
+    if 'last_sync_time' not in st.session_state:
+        st.session_state.last_sync_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     # Top Action Bar
-    col_action, _ = st.columns([0.2, 0.8])
+    col_action, col_time = st.columns([0.2, 0.8])
     with col_action:
         if st.button("🔄 원본 데이터 불러오기", key="analysis_refresh"):
             st.cache_data.clear()
+            st.session_state.last_sync_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             st.rerun()
+    with col_time:
+        st.markdown(f"<div style='padding-top: 10px; color: #666; font-size: 0.9em;'>최근 동기화: {st.session_state.last_sync_time}</div>", unsafe_allow_html=True)
 
     # st.header("📊 데이터 분석 리포트") # Title handled in app.py
     
@@ -78,16 +86,18 @@ def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None, d
             <ul>
                 <li><b>공급 (Capacity)</b>: 스쿼드에서 공급가능한 과제 리소스
                     <ul>
-                        <li>(보유 인원 ÷ 최소 투입 인원) × 5.0 × 0.8</li>
-                        <li>회의, 운영 업무 등 고려하여 80% 를 '적정'으로 잡고 계산</li>
+                        <li><b>계산</b>: 스쿼드 유닛 × 5.0 × 0.8</li>
+                        <li><b>스쿼드 유닛</b>: 스쿼드 보유 인원 ÷ 최소 투입 인원</li>
+                        <li><b>5.0</b>: 스쿼드 유닛당 프로젝트 1개, 테스크 2개 동시 진행 가능 전제</li>
+                        <li><b>0.8</b>: 회의, 운영 업무 등 고려하여 80% 를 '적정'으로 잡고 계산</li>
                     </ul>
                 </li>
                 <li><b>수요 (Total Load)</b>: 오늘 기준 진행 중인 과제(상태='진행 중' OR 시작일 ≤ 오늘 ≤ 종료일)들의 Type별 가중치 총합</li>
             </ul>
              <p><b>[해석 가이드]</b></p>
             <ul>
-                <li><b>부족 인원 양수(+)</b>: 현재 리소스 대비 과제 부하가 높아 인력 충원이 필요함 🔴</li>
-                <li><b>부족 인원 음수(-)</b>: 현재 리소스 대비 과제 부하가 낮아 여유가 있음 🟢</li>
+                <li><b>수요 (빨간색) > 공급 (파란색)</b>: 현재 리소스 대비 과제 부하가 높아 인력 충원 또는 과제의 우선순위 조정을 통해 정리 필요 🔴</li>
+                <li><b>수요 (빨간색) < 공급 (파란색)</b>: 현재 리소스 대비 과제 부하가 낮아 여유가 있음 🟢</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
@@ -159,8 +169,8 @@ def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None, d
         else:
             score_help_text += "\n(데이터 없음)"
             
-        # Create 2 columns for Master-Detail view
-        col1, col2 = st.columns([1.2, 1])
+        # Create 2 columns for Master-Detail view (Right side wider per request)
+        col1, col2 = st.columns([0.8, 1.2])
         
         with col1:
             st.markdown("###### 👈 스쿼드를 선택하여 상세 과제를 확인하세요")
@@ -179,7 +189,7 @@ def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None, d
                     "Capacity_Score": st.column_config.NumberColumn(
                         "Capacity", 
                         format="%.1f",
-                        help="Capacity Score (공급)"
+                        help="스쿼드에서 공급가능한 과제 리소스\n(스쿼드 보유 인원 ÷ 최소 투입 인원) × 5.0 × 0.8"
                     ),
                     "Total_Load_Score": st.column_config.NumberColumn(
                         "Total Load", 
@@ -212,18 +222,82 @@ def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None, d
                     # Sort by End date for relevance
                     active_tasks_df = active_tasks_df.sort_values(by='End', na_position='last')
                     
-                    st.dataframe(
-                        active_tasks_df[['Task', 'Biz_impact', 'Type', 'Status', 'End']],
+                    # Ensure 'Priority per squad' exists
+                    if 'Priority per squad' not in active_tasks_df.columns:
+                        active_tasks_df['Priority per squad'] = ""
+                    else:
+                        active_tasks_df['Priority per squad'] = active_tasks_df['Priority per squad'].astype(object).fillna("")
+                        
+                    st.caption("💡 **'우선순위'** 열의 데이터만 더블 클릭하여 수정할 수 있습니다. (숫자 및 텍스트 입력 가능)")
+                    
+                    edited_df = st.data_editor(
+                        active_tasks_df[['Priority per squad', 'Task', 'Biz_impact', 'Type', 'Status', 'End']],
+                        key=f"priority_editor_{selected_squad}",
                         column_config={
-                            "Task": "과제명",
-                            "Biz_impact": "비즈니스 임팩트 (Biz Impact)",
-                            "Type": "Type",
-                            "Status": "상태",
-                            "End": st.column_config.DateColumn("종료일", format="YYYY-MM-DD")
+                            "Priority per squad": st.column_config.TextColumn(
+                                "우선순위",
+                                help="스쿼드 내 과제 우선순위 (숫자 또는 텍스트 입력 가능)"
+                            ),
+                            "Task": st.column_config.TextColumn("과제명", disabled=True),
+                            "Biz_impact": st.column_config.TextColumn("비즈니스 임팩트 (Biz Impact)", disabled=True),
+                            "Type": st.column_config.TextColumn("Type", disabled=True),
+                            "Status": st.column_config.TextColumn("상태", disabled=True),
+                            "End": st.column_config.DateColumn("종료일", format="YYYY-MM-DD", disabled=True)
                         },
                         hide_index=True,
-                        use_container_width=True
+                        use_container_width=True,
+                        num_rows="fixed"
                     )
+                    
+                    submit_col_time, submit_col_refresh, submit_col_save = st.columns([0.65, 0.15, 0.2])
+                    with submit_col_time:
+                        st.markdown(f"<div style='text-align: right; padding-top: 5px; color: #888; font-size: 0.85em;'>최근 동기화: {st.session_state.last_sync_time}</div>", unsafe_allow_html=True)
+                    with submit_col_refresh:
+                        refresh_button = st.button("🔄 새로고침", use_container_width=True, key=f"refresh_btn_{selected_squad}")
+                    with submit_col_save:
+                        submit_button = st.button("저장하기", type="primary", use_container_width=True, key=f"save_btn_{selected_squad}")
+                        
+                    if refresh_button:
+                        st.cache_data.clear()
+                        st.session_state.last_sync_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        st.rerun()
+                        
+                    if submit_button:
+                            # 1) Get the original full dataframe
+                            if raw_df is not None and sheet_id:
+                                with st.spinner("데이터 저장 중..."):
+                                    # Create a copy to modify
+                                    updated_raw_df = raw_df.copy()
+                                    
+                                    # Ensure column exists in raw_df
+                                    if 'Priority per squad' not in updated_raw_df.columns:
+                                        updated_raw_df['Priority per squad'] = None
+                                        
+                                    # Sync changes back to raw_df
+                                    # edited_df has the same index as active_tasks_df, which has same index as df
+                                    # But raw_df may have different index if df was filtered/sorted
+                                    # Match by 'Task' name to be safe since Task should be unique enough,
+                                    # or we could match by multiple columns. We'll use Task.
+                                    
+                                    for idx, row in edited_df.iterrows():
+                                        task_name = row['Task']
+                                        new_priority = row['Priority per squad']
+                                        
+                                        if pd.notna(new_priority):
+                                            # Find matching row in raw_df based on Task name
+                                            match_idx = updated_raw_df[updated_raw_df['Task'] == task_name].index
+                                            if not match_idx.empty:
+                                                updated_raw_df.loc[match_idx, 'Priority per squad'] = new_priority
+                                    
+                                    # Save to GSheet
+                                    success = save_snapshot(sheet_id, updated_raw_df, worksheet_name)
+                                    if success:
+                                        st.success("우선순위가 성공적으로 저장되었습니다!")
+                                        st.rerun()
+                                    else:
+                                        st.error("저장에 실패했습니다. GSheet 연결 상태를 확인해주세요.")
+                            else:
+                                st.warning("원본 데이터를 찾을 수 없어 저장할 수 없습니다.")
                 else:
                     st.info("해당 스쿼드에 진행 중인 과제가 없습니다.")
             else:

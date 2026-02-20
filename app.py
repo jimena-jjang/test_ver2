@@ -68,6 +68,20 @@ with st.sidebar:
         label_visibility="collapsed"
     )
     
+    # Add a small margin top instead of a full <br> to keep it closer to the menu
+    st.markdown(
+        """
+        <div style="margin-top: 5px;">
+            <a href="https://booost.astage.in/" target="_blank" style="text-decoration: none;">
+                <div style="display: flex; align-items: center; padding: 0.4rem 0.8rem; background-color: transparent; border-radius: 0.5rem; color: #31333F; font-size: 1rem; transition: background-color 0.2s;">
+                    <span style="margin-right: 0.5rem; font-size: 1.1rem;">🔗</span> 지라 과제 현황 바로가기
+                </div>
+            </a>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+    
     st.divider()
 
 # -----------------------------------------------------------------------------
@@ -214,7 +228,7 @@ else:
             </div>
             """, unsafe_allow_html=True)
             # if resource_file: logic removed as it is handled above.
-            analysis.render_analysis_report(final_df, df_resource, df_weights)
+            analysis.render_analysis_report(final_df, raw_df, sheet_id, worksheet_name, df_resource, df_weights)
 
         elif page == "데이터 수정":
             st.markdown(f"""

@@ -155,9 +155,15 @@ def save_snapshot(sheet_url_or_id: str, df: pd.DataFrame, master_worksheet_name:
             try:
                 if isinstance(val, (pd.Timestamp, datetime)):
                     return val.strftime("%Y-%m-%d")
-                return str(val)[:10] # Fallback
+                
+                # Prevent blindly truncating formatting
+                val_str = str(val).strip()
+                if len(val_str) > 10 and len(val_str) <= 25 and '-' in val_str and ':' in val_str:
+                    return val_str.split(" ")[0]
+                
+                return val_str # Return original string otherwise
             except:
-                return ""
+                return str(val)
 
         # Ensure all date columns are converted to strings properly
         date_cols = ['Start', 'End']
