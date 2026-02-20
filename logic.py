@@ -285,23 +285,21 @@ def calculate_utilization_metrics(df_tasks: pd.DataFrame, df_resource: pd.DataFr
         squad_summary = pd.DataFrame(columns=['Squad', 'Total_Tasks', 'Active_Tasks'])
     else:
         # Calculate Active Count: Start <= Today <= End
-        today_date = datetime.now()
+        today_date = pd.Timestamp(datetime.now().date())
         
-        # Helper for active count
-        def get_active_count(group):
-            mask = (group['Status'] == '진행 중')
-            return mask.sum()
+        # Ensure Start and End are datetime
+        start_col = pd.to_datetime(df_tasks['Start'], errors='coerce')
+        end_col = pd.to_datetime(df_tasks['End'], errors='coerce')
+        
+        # Active if: Status is '진행 중' OR (Start_Date <= Today <= End_Date)
+        is_in_progress = df_tasks['Status'] == '진행 중'
+        is_in_range = (start_col <= today_date) & (end_col >= today_date)
+        active_mask = is_in_progress | is_in_range
 
         squad_summary = df_tasks.groupby('Squad').agg(
-            Total_Tasks=('Task', 'count'),
-            Active_Tasks=('Status', lambda x: get_active_count(df_tasks.loc[x.index])) 
-            # Note: lambda x involves index lookup which is robust. 
-            # Simplified: filter active first then group count might be faster but this preserves all squads.
+            Total_Tasks=('Task', 'count')
         ).reset_index()
 
-        # Re-calc Active Tasks simpler way to avoid lambda complexity issues
-        # Active if: Status is '진행 중'
-        active_mask = (df_tasks['Status'] == '진행 중')
         active_counts = df_tasks[active_mask].groupby('Squad').size().reset_index(name='Active_Tasks_Calc')
         
         # Merge to ensure 0 for no active tasks
@@ -343,10 +341,9 @@ def calculate_utilization_metrics(df_tasks: pd.DataFrame, df_resource: pd.DataFr
         # Return basic stats if no resource data, but ensure columns exist for UI consistency
         squad_summary['Headcount'] = 0
         squad_summary['Min_Personnel'] = 0
-        squad_summary['Capacity'] = 0.0
-        squad_summary['Realistic_Capacity'] = 0.0
-        squad_summary['Load_Rate'] = 0.0
-        squad_summary['Balance'] = 0.0
+        squad_summary['Capacity_Score'] = 0.0
+        squad_summary['Total_Load_Score'] = squad_summary['Active_Tasks_Score'] if 'Active_Tasks_Score' in squad_summary.columns else 0.0
+        squad_summary['Shortage'] = 0.0
         return squad_summary
 
     # 2. Merge with Resource Data
@@ -359,27 +356,29 @@ def calculate_utilization_metrics(df_tasks: pd.DataFrame, df_resource: pd.DataFr
     
     # 3. Calculate Metrics
     def calc_row(row):
-        headcount = row['Headcount']
-        min_p = row['Min_Personnel'] if row['Min_Personnel'] > 0 else 1.0
+        headcount = pd.to_numeric(row['Headcount'], errors='coerce')
+        if pd.isna(headcount): headcount = 0
+            
+        min_p = pd.to_numeric(row['Min_Personnel'], errors='coerce')
+        if pd.isna(min_p) or min_p <= 0: min_p = 1.0
+        
         active_count = row['Active_Tasks']
-        active_score = row.get('Active_Tasks_Score', active_count)
+        total_load_score = row.get('Active_Tasks_Score', active_count)
         
-        # Capacity (How many tasks can be handled)
-        capacity = headcount / min_p
+        # A. Capacity Score: (보유인원 / 최소인원) * 5.0 * 0.8
+        capacity_score = (headcount / min_p) * 5.0 * 0.8
         
-        # Realistic Capacity (80% utilization)
-        realistic_capacity = capacity * 0.8
+        # B. Total Load Score
+        # Already calculated as total_load_score
         
-        # Load Rate (Based on Score and Realistic Capacity)
-        load_rate = active_score / realistic_capacity if realistic_capacity > 0 else 0
+        # C. Shortage: (Total Load Score - Capacity Score) / Unit Score
+        # Unit Score = 4.0 / Min_Personnel
+        unit_score = 4.0 / min_p
+        shortage = round((total_load_score - capacity_score) / unit_score, 1) if unit_score > 0 else 0.0
         
-        # Balance (Headcount - Required)
-        required = active_score * min_p
-        balance = headcount - required
-        
-        return pd.Series([capacity, realistic_capacity, load_rate, balance])
+        return pd.Series([capacity_score, total_load_score, shortage])
 
-    merged[['Capacity', 'Realistic_Capacity', 'Load_Rate', 'Balance']] = merged.apply(calc_row, axis=1)
+    merged[['Capacity_Score', 'Total_Load_Score', 'Shortage']] = merged.apply(calc_row, axis=1)
     
     # [User Request] Filter out '미정' and '공통' squads
     merged = merged[~merged['Squad'].isin(['미정', '공통'])]

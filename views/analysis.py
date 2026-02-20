@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 from logic import calculate_workload, predict_start_date, identify_issues, calculate_utilization_metrics
 import textwrap
 import utils
@@ -73,61 +74,76 @@ def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None, d
         # 1. Formula Explanation (Detailed Box)
         st.markdown(f"""
         <div class="explanation-card">
-            <div class="explanation-title">📊 부하율 (Load Rate) 계산 방식</div>
-            <p><b>부하율 (%) = (진행중 과제 점수 합산 ÷ 현실적 수행 능력) × 100</b></p>
+            <div class="explanation-title">📊 스쿼드 리소스 분석 (공급 vs 수요)</div>
             <ul>
-                <li><b>진행중 과제 점수 합산 (Active Task Score)</b>: 오늘 기준 진행 중인 과제(시작일 ≤ 오늘 ≤ 종료일 OR 상태='진행 중')들의 Type별 Weight 총합</li>
-                <li><b>현실적 수행 능력 (Realistic Capacity)</b>: 기초 수행 능력(보유 인원/필요 인원) × 가동률(80%)</li>
+                <li><b>공급 (Capacity)</b>: 스쿼드에서 공급가능한 과제 리소스
+                    <ul>
+                        <li>(보유 인원 ÷ 최소 투입 인원) × 5.0 × 0.8</li>
+                        <li>회의, 운영 업무 등 고려하여 80% 를 '적정'으로 잡고 계산</li>
+                    </ul>
+                </li>
+                <li><b>수요 (Total Load)</b>: 오늘 기준 진행 중인 과제(상태='진행 중' OR 시작일 ≤ 오늘 ≤ 종료일)들의 Type별 가중치 총합</li>
             </ul>
              <p><b>[해석 가이드]</b></p>
             <ul>
-                <li><b>100% 초과</b>: 수행 능력보다 많은 일이 몰려있음 (과부하) 🔴</li>
-                <li><b>100% 미만</b>: 수행 능력 대비 여유가 있음 🟢</li>
+                <li><b>부족 인원 양수(+)</b>: 현재 리소스 대비 과제 부하가 높아 인력 충원이 필요함 🔴</li>
+                <li><b>부족 인원 음수(-)</b>: 현재 리소스 대비 과제 부하가 낮아 여유가 있음 🟢</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
         
-        # 2. Key Metrics Visualization (Bar Chart with Load Rate color)
-        def get_color(rate):
-            if rate >= 1.5: return '#FF4B4B' # Red (Severe)
-            if rate >= 1.0: return '#FFA500' # Orange (Warning)
-            return '#28a745' # Green (Good)
-
-        metrics_df['Color'] = metrics_df['Load_Rate'].apply(get_color)
+        # 2. Key Metrics Visualization (Grouped Bar Chart)
+        # Sort by Shortage descending
+        metrics_df = metrics_df.sort_values(by='Shortage', ascending=False)
         
-        # [User Request] Sort by Load Rate descending
-        metrics_df = metrics_df.sort_values(by='Load_Rate', ascending=False)
+        fig = go.Figure()
         
-        # Enhanced Bar Chart
-        fig = px.bar(
-            metrics_df, 
-            x='Squad', 
-            y='Load_Rate',
-            title="스쿼드별 부하율 (Load Rate)", 
-            text_auto='.0%'
+        # Bar 1: Capacity (Blueish)
+        fig.add_trace(go.Bar(
+            x=metrics_df['Squad'],
+            y=metrics_df['Capacity_Score'],
+            name='Capacity (공급)',
+            marker_color='#3b82f6',
+            customdata=metrics_df[['Shortage']],
+            hovertemplate="<b>%{x}</b><br>Capacity Score: %{y:.1f}<br>부족 인원: %{customdata[0]:.1f}명<extra></extra>",
+            text=metrics_df['Capacity_Score'],
+            texttemplate='%{text:.1f}',
+            textposition='auto'
+        ))
+        
+        # Bar 2: Total Load (Redish)
+        fig.add_trace(go.Bar(
+            x=metrics_df['Squad'],
+            y=metrics_df['Total_Load_Score'],
+            name='Total Load (수요)',
+            marker_color='#ef4444',
+            customdata=metrics_df[['Shortage']],
+            hovertemplate="<b>%{x}</b><br>Total Load Score: %{y:.1f}<br>부족 인원: %{customdata[0]:.1f}명<extra></extra>",
+            text=metrics_df['Total_Load_Score'],
+            texttemplate='%{text:.1f}',
+            textposition='auto'
+        ))
+        
+        fig.update_layout(
+            barmode='group',
+            title="스쿼드별 리소스 분석 (Capacity vs Total Load)",
+            xaxis_title="스쿼드",
+            yaxis_title="Score",
+            height=400,
+            hovermode="x unified",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
-        fig.update_traces(
-            marker_color=metrics_df['Color'],
-            hovertemplate=(
-                "<b>%{x}</b><br>" +
-                "Load Rate: %{y:.0%}<br>" +
-                "Active Task Score: %{customdata[0]:.1f}<br>" +
-                "Realistic Capacity: %{customdata[1]:.1f}<br>" +
-                "Headcount: %{customdata[2]}<br>" +
-                "Min Personnel: %{customdata[3]}<extra></extra>"
-            ),
-            customdata=metrics_df[['Active_Tasks_Score', 'Realistic_Capacity', 'Headcount', 'Min_Personnel']]
-        )
-        fig.add_hline(y=1.0, line_dash="dash", line_color="gray", annotation_text="100% Capacity")
-        fig.update_layout(yaxis_tickformat=".0%", height=400)
         
         st.plotly_chart(fig, use_container_width=True)
         
         # 3. Detailed Data Table
         st.subheader("📋 상세 데이터")
         
+        # Format Head / Min string
+        metrics_df['Head_Min'] = metrics_df['Headcount'].astype(str) + " / " + metrics_df['Min_Personnel'].astype(str)
+        
         # Select columns for display
-        display_cols = ['Squad', 'Total_Tasks', 'Active_Tasks_Score', 'Headcount', 'Min_Personnel', 'Realistic_Capacity']
+        display_cols = ['Squad', 'Head_Min', 'Capacity_Score', 'Total_Load_Score']
         
         # Create tooltip for Active Tasks Score
         score_help_text = "오늘 날짜 기준 진행 중인 과제들의 Type별 가중치 합산 점수\n\n[Type별 점수 기준]"
@@ -149,32 +165,26 @@ def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None, d
         with col1:
             st.markdown("###### 👈 스쿼드를 선택하여 상세 과제를 확인하세요")
             
-            # Interactive Dataframe
+            # Interactive Dataframe with st.dataframe using style mapping
+            styled_df = metrics_df[display_cols].style
+            
             selection = st.dataframe(
-                metrics_df[display_cols],
+                styled_df,
                 column_config={
                     "Squad": st.column_config.TextColumn("스쿼드", disabled=True),
-                    "Total_Tasks": st.column_config.NumberColumn(
-                        "총 과제수", 
-                        help="로드된 Roadmap 데이터 기준 전체 과제 개수"
+                    "Head_Min": st.column_config.TextColumn(
+                        "보유/최소(Head/Min)", 
+                        help="스쿼드의 보유 인원과 과제 1개를 수행하는 데 필요한 최소 투입 인원"
                     ),
-                    "Active_Tasks_Score": st.column_config.NumberColumn(
-                        "진행중 과제 점수", 
-                        format="%.1f점",
+                    "Capacity_Score": st.column_config.NumberColumn(
+                        "Capacity", 
+                        format="%.1f",
+                        help="Capacity Score (공급)"
+                    ),
+                    "Total_Load_Score": st.column_config.NumberColumn(
+                        "Total Load", 
+                        format="%.1f",
                         help=score_help_text
-                    ),
-                    "Headcount": st.column_config.NumberColumn(
-                        "보유 인원", 
-                        help="리소스 데이터(파일/시트)에 등록된 스쿼드별 총 인원"
-                    ),
-                    "Min_Personnel": st.column_config.NumberColumn(
-                        "필요 인원/Task", 
-                        help="리소스 데이터(파일/시트)의 'Min_Personnel' 기준. 과제 1개를 수행하는 데 필요한 최소 투입 인원"
-                    ),
-                    "Realistic_Capacity": st.column_config.NumberColumn(
-                        "현실적 수행 능력", 
-                        format="%.1f점", 
-                        help="동시에 처리 가능한 기초 수행 능력에 80% 가동률을 적용한 현실적 적정 과제 점수치"
                     )
                 },
                 hide_index=True,
@@ -203,10 +213,11 @@ def render_analysis_report(df: pd.DataFrame, df_resource: pd.DataFrame = None, d
                     active_tasks_df = active_tasks_df.sort_values(by='End', na_position='last')
                     
                     st.dataframe(
-                        active_tasks_df[['Task', 'Biz_impact', 'Status', 'End']],
+                        active_tasks_df[['Task', 'Biz_impact', 'Type', 'Status', 'End']],
                         column_config={
                             "Task": "과제명",
                             "Biz_impact": "비즈니스 임팩트 (Biz Impact)",
+                            "Type": "Type",
                             "Status": "상태",
                             "End": st.column_config.DateColumn("종료일", format="YYYY-MM-DD")
                         },
